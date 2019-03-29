@@ -3,7 +3,7 @@ import numpy as np
 
 
 def model_builder(embedding_, context_):
-    num_units = 10
+    num_units = 5
 
     def model(features, labels, mode, params):
         embedding = tf.get_variable(
@@ -60,6 +60,8 @@ def model_builder(embedding_, context_):
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
             optimizer = tf.train.AdamOptimizer()
+            grads = tf.gradients(loss, tf.trainable_variables())
+            tf.summary.scalar("grad_norm", tf.global_norm(grads))
             train = optimizer.minimize(
                 loss, global_step=tf.train.get_or_create_global_step()
             )
@@ -125,7 +127,7 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
-            batch_size=2,
+            batch_size=50,
             sample_size=1000,
             total_context=len(contexts),
         ),
