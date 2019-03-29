@@ -11,8 +11,8 @@ def get_word2vec(word_set):
     with open(glove_path, "r", encoding="utf-8") as fh:
         for line in tqdm(fh, total=int(2.2e6), desc="getting wordvec"):
             array = line.lstrip().rstrip().split(" ")
-            word = array[0]
-            vector = list(map(float, array[1:]))
+            word = " ".join(array[0 : len(array) - 300])
+            vector = list(map(float, array[-300:]))
             if word in word_set:
                 word2vec_dict[word] = vector
             elif word.capitalize() in word_set:
@@ -120,8 +120,7 @@ for i in range(2):
 
 map(lambda x: x.close(), writers)
 
-del word_vecs
 embedding_mat.insert(0, [0] * 300)
-embedding_mat.insert(1, np.random.uniform(-0.05, 0.05, (100,)))
-np.save("embedding", embedding_mat)
-np.save("all_context", all_context)
+embedding_mat.insert(1, list(np.random.uniform(-0.05, 0.05, (300,))))
+np.save("embedding", np.array(embedding_mat))
+np.save("all_context", np.array(all_context))

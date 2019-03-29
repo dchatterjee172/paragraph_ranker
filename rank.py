@@ -4,15 +4,43 @@ import numpy as np
 
 def model_builder(embedding_, context_):
     def model(features, labels, mode, params):
-        embedding = tf.get_variable("embedding", shape=embedding_.size, trainable=False)
-        context = tf.get_variable("context", shape=context_.size, trainable=False)
+        embedding = tf.get_variable(
+            "embedding", shape=embedding_.shape, trainable=False, dtype=tf.float32
+        )
+        all_context = tf.get_variable(
+            "all_context", shape=context_.shape, trainable=False, dtype=tf.int32
+        )
+        q_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="q_fw")
+        q_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="q_bw")
+        c_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="c_fw")
+        c_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="c_bw")
 
         def init_fn(scaffold, sess):
             sess.run(embedding.initializer, {embedding.initial_value: embedding_})
             sess.run(context.initializer, {context.initial_value: context_})
+            tf.logging.info("embedding initialized")
+
+        tf.logging.info("*** Features ***")
+        for name in sorted(features.keys()):
+            tf.logging.info(f"  name = {name}, shape = {features[name].shape}")
 
         context_id = features["context_id"]
         q = features["q"]
+        batch_size = tf.shape(q)[0]
+        sample_size = tf.shape(context_id)[1]
+        q = tf.nn.embedding_lookup(embedding, q)
+        context = tf.nn.embedding_lookup(all_context, context_id)
+        context = tf.nn.embedding_lookup(embedding, context_id)
+        with tf.variable_scope("q_birnn"):
+            q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
+        with tf.variable_scope("c_birnn"):
+            context = tf.reshape(
+                context, [batch_size * sample_size, -1, embedding_.shape[-1]]
+            )
+            q = tf.nn.bidirectional_dynamic_rnn(c_fw, c_bw, context, dtype=tf.float32)[
+                0
+            ]
+
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
             loss = tf.constant(0.0)
@@ -36,7 +64,7 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
     def input_fn():
         name_to_features = {
             "context_id": tf.FixedLenFeature([1], tf.int64),
-            "q": tf.FixedLenFeature([300], tf.int64),
+            "q": tf.FixedLenFeature([20], tf.int64),
         }
 
         def _decode_record(record, name_to_features):
@@ -65,8 +93,10 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
     return input_fn
 
 
-if __name__ == "__main__":
+def main(_):
+    tf.logging.set_verbosity(tf.logging.INFO)
     emb = np.load("embedding.npy")
+    print(emb.size)
     contexts = np.load("all_context.npy")
     model_fn = model_builder(emb, contexts)
     run_config = tf.estimator.RunConfig(
@@ -90,9 +120,9 @@ if __name__ == "__main__":
     )
     train_spec = tf.estimator.TrainSpec(
         input_fn=input_fn_builder(
-            input_file="test.tfrecord",
-            is_training=False,
-            batch_size=2,
+            input_file="train.tfrecord",
+            is_training=True,
+            batch_size=5,
             sample_size=5,
             total_context=len(contexts),
         ),
@@ -100,3 +130,7 @@ if __name__ == "__main__":
     )
     estimator = tf.estimator.Estimator(model_fn=model_fn, config=run_config)
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+
+
+if __name__ == "__main__":
+    tf.app.run()
