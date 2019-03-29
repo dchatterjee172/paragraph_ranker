@@ -124,3 +124,4 @@ del word_vecs
 embedding_mat.insert(0, [0] * 300)
 embedding_mat.insert(1, np.random.uniform(-0.05, 0.05, (100,)))
 np.save("embedding", embedding_mat)
+np.save("all_context", all_context)
