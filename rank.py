@@ -3,6 +3,8 @@ import numpy as np
 
 
 def model_builder(embedding_, context_):
+    num_units = 150
+
     def model(features, labels, mode, params):
         embedding = tf.get_variable(
             "embedding", shape=embedding_.shape, trainable=False, dtype=tf.float32
@@ -10,14 +12,14 @@ def model_builder(embedding_, context_):
         all_context = tf.get_variable(
             "all_context", shape=context_.shape, trainable=False, dtype=tf.int32
         )
-        q_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="q_fw")
-        q_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="q_bw")
-        c_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="c_fw")
-        c_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=200, name="c_bw")
+        q_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="q_fw")
+        q_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="q_bw")
+        c_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="c_fw")
+        c_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="c_bw")
 
         def init_fn(scaffold, sess):
             sess.run(embedding.initializer, {embedding.initial_value: embedding_})
-            sess.run(context.initializer, {context.initial_value: context_})
+            sess.run(all_context.initializer, {all_context.initial_value: context_})
             tf.logging.info("embedding initialized")
 
         tf.logging.info("*** Features ***")
@@ -33,17 +35,29 @@ def model_builder(embedding_, context_):
         context = tf.nn.embedding_lookup(embedding, context_id)
         with tf.variable_scope("q_birnn"):
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
+            q = tf.concat(q, 2)
+            q = q[:, -1, :]
         with tf.variable_scope("c_birnn"):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
-            q = tf.nn.bidirectional_dynamic_rnn(c_fw, c_bw, context, dtype=tf.float32)[
-                0
-            ]
+            context = tf.nn.bidirectional_dynamic_rnn(
+                c_fw, c_bw, context, dtype=tf.float32
+            )[0]
+            context = tf.concat(context, 2)
+            context = tf.reshape(context, [batch_size, sample_size, -1, 300])
+            context = context[:, :, -1, :]
+        q = tf.expand_dims(q, -2)
+        logits = tf.matmul(context, q, transpose_b=True)
+        logits = tf.squeeze(logits, -1)
 
+        labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
+        one_hot = tf.one_hot(labels, depth=sample_size)
+        log_probs = tf.nn.log_softmax(logits, axis=-1)
+        loss = -tf.reduce_sum(one_hot * log_probs, axis=-1)
+        loss = tf.reduce_mean(loss)
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
-            loss = tf.constant(0.0)
             optimizer = tf.train.AdamOptimizer()
             train = optimizer.minimize(
                 loss, global_step=tf.train.get_or_create_global_step()
@@ -104,7 +118,7 @@ def main(_):
         save_summary_steps=100,
         save_checkpoints_steps=1000,
         keep_checkpoint_max=2,
-        log_step_count_steps=1,
+        log_step_count_steps=100,
     )
     eval_spec = tf.estimator.EvalSpec(
         input_fn=input_fn_builder(
@@ -122,11 +136,11 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="train.tfrecord",
             is_training=True,
-            batch_size=5,
+            batch_size=20,
             sample_size=5,
             total_context=len(contexts),
         ),
-        max_steps=200,
+        max_steps=200_000,
     )
     estimator = tf.estimator.Estimator(model_fn=model_fn, config=run_config)
     tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
