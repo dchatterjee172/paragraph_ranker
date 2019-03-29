@@ -100,7 +100,7 @@ for c in tqdm(range(len(all_context)), total=len(all_context)):
     if len(all_context[c]) < 300:
         all_context[c] += [0] * (300 - len(all_context[c]))
 
-writers = (FeatureWriter("train.tfrecord"), FeatureWriter("test.tfrecord"))
+writers = (FeatureWriter("test.tfrecord"), FeatureWriter("train.tfrecord"))
 
 for i in range(2):
     for q in tqdm(range(len(data[i])), total=len(data[i])):
