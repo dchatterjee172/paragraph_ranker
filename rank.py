@@ -3,7 +3,7 @@ import numpy as np
 
 
 def model_builder(embedding_, context_):
-    num_units = 150
+    num_units = 10
 
     def model(features, labels, mode, params):
         embedding = tf.get_variable(
@@ -35,8 +35,7 @@ def model_builder(embedding_, context_):
         context = tf.nn.embedding_lookup(embedding, context_id)
         with tf.variable_scope("q_birnn"):
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
-            q = tf.concat(q, 2)
-            q = q[:, -1, :]
+            q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
         with tf.variable_scope("c_birnn"):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
@@ -44,10 +43,12 @@ def model_builder(embedding_, context_):
             context = tf.nn.bidirectional_dynamic_rnn(
                 c_fw, c_bw, context, dtype=tf.float32
             )[0]
-            context = tf.concat(context, 2)
-            context = tf.reshape(context, [batch_size, sample_size, -1, 300])
-            context = context[:, :, -1, :]
+            context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
+            context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
+        is_training = mode == tf.estimator.ModeKeys.TRAIN
+        q = tf.layers.dropout(q, 0.2, training=is_training)
+        context = tf.layers.dropout(context, 0.2, training=is_training)
         logits = tf.matmul(context, q, transpose_b=True)
         logits = tf.squeeze(logits, -1)
 
@@ -91,8 +92,8 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
 
         d = tf.data.TFRecordDataset(input_file)
         drop_remainder = False
+        d = d.repeat()
         if is_training:
-            d = d.repeat()
             d = d.shuffle(buffer_size=100)
             drop_remainder = True
         d = d.apply(
@@ -125,19 +126,19 @@ def main(_):
             input_file="test.tfrecord",
             is_training=False,
             batch_size=2,
-            sample_size=5,
+            sample_size=1000,
             total_context=len(contexts),
         ),
         steps=100,
         start_delay_secs=0,
-        throttle_secs=120,
+        throttle_secs=0,
     )
     train_spec = tf.estimator.TrainSpec(
         input_fn=input_fn_builder(
             input_file="train.tfrecord",
             is_training=True,
-            batch_size=20,
-            sample_size=5,
+            batch_size=50,
+            sample_size=1000,
             total_context=len(contexts),
         ),
         max_steps=200_000,
