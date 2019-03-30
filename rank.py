@@ -62,8 +62,8 @@ def model_builder(embedding_, context_):
             optimizer = tf.train.AdamOptimizer()
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
-            clipped_grad = tf.clip_by_global_norm(grads, 0.5)
-            tf.summary.scalar("grad_norm", tf.global_norm(grads))
+            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.5)
+            tf.summary.scalar("grad_norm", norm)
             train = optimizer.apply_gradients(
                 zip(clipped_grad, var), global_step=tf.train.get_or_create_global_step()
             )
