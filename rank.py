@@ -3,7 +3,7 @@ import numpy as np
 
 
 def model_builder(embedding_, context_):
-    num_units = 5
+    num_units = 50
 
     def model(features, labels, mode, params):
         embedding = tf.get_variable(
@@ -47,8 +47,8 @@ def model_builder(embedding_, context_):
             context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
         is_training = mode == tf.estimator.ModeKeys.TRAIN
-        q = tf.layers.dropout(q, 0.2, training=is_training)
-        context = tf.layers.dropout(context, 0.2, training=is_training)
+        q = tf.layers.dropout(q, 0.4, training=is_training)
+        context = tf.layers.dropout(context, 0.4, training=is_training)
         logits = tf.matmul(context, q, transpose_b=True)
         logits = tf.squeeze(logits, -1)
 
@@ -60,10 +60,12 @@ def model_builder(embedding_, context_):
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
             optimizer = tf.train.AdamOptimizer()
-            grads = tf.gradients(loss, tf.trainable_variables())
+            var = tf.trainable_variables()
+            grads = tf.gradients(loss, var)
+            clipped_grad = tf.clip_by_global_norm(grads, 0.5)
             tf.summary.scalar("grad_norm", tf.global_norm(grads))
-            train = optimizer.minimize(
-                loss, global_step=tf.train.get_or_create_global_step()
+            train = optimizer.apply_gradients(
+                zip(clipped_grad, var), global_step=tf.train.get_or_create_global_step()
             )
             return tf.estimator.EstimatorSpec(
                 mode, loss=loss, train_op=train, scaffold=scaffold
@@ -128,8 +130,8 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
-            batch_size=35,
-            sample_size=500,
+            batch_size=25,
+            sample_size=200,
             total_context=len(contexts),
         ),
         steps=1,
@@ -140,8 +142,8 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="train.tfrecord",
             is_training=True,
-            batch_size=35,
-            sample_size=500,
+            batch_size=25,
+            sample_size=200,
             total_context=len(contexts),
         ),
         max_steps=200_000,
