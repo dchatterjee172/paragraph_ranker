@@ -96,7 +96,7 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
         drop_remainder = False
         d = d.repeat()
         if is_training:
-            d = d.shuffle(buffer_size=300)
+            d = d.shuffle(buffer_size=100)
             drop_remainder = True
         d = d.apply(
             tf.data.experimental.map_and_batch(
@@ -128,8 +128,8 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
-            batch_size=20,
-            sample_size=1000,
+            batch_size=35,
+            sample_size=500,
             total_context=len(contexts),
         ),
         steps=1,
@@ -140,8 +140,8 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="train.tfrecord",
             is_training=True,
-            batch_size=20,
-            sample_size=1000,
+            batch_size=35,
+            sample_size=500,
             total_context=len(contexts),
         ),
         max_steps=200_000,
