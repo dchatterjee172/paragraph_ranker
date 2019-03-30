@@ -32,7 +32,7 @@ def model_builder(embedding_, context_):
         sample_size = tf.shape(context_id)[1]
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context_id)
-        context = tf.nn.embedding_lookup(embedding, context_id)
+        context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q_birnn"):
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
             q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
@@ -96,7 +96,7 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
         drop_remainder = False
         d = d.repeat()
         if is_training:
-            d = d.shuffle(buffer_size=100)
+            d = d.shuffle(buffer_size=300)
             drop_remainder = True
         d = d.apply(
             tf.data.experimental.map_and_batch(
@@ -111,6 +111,7 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
 
 
 def main(_):
+    tf.set_random_seed(1234)
     tf.logging.set_verbosity(tf.logging.INFO)
     emb = np.load("embedding.npy")
     print(emb.size)
@@ -127,11 +128,11 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
-            batch_size=50,
+            batch_size=20,
             sample_size=1000,
             total_context=len(contexts),
         ),
-        steps=100,
+        steps=1,
         start_delay_secs=0,
         throttle_secs=0,
     )
@@ -139,7 +140,7 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="train.tfrecord",
             is_training=True,
-            batch_size=50,
+            batch_size=20,
             sample_size=1000,
             total_context=len(contexts),
         ),
