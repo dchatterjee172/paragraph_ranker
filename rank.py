@@ -60,9 +60,13 @@ def model_builder(embedding_, context_):
         logits = tf.matmul(context, q, transpose_b=True)
         logits = tf.squeeze(logits, -1)
         labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
-        labels = tf.one_hot(labels, depth=sample_size)
-        loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits)
+        labels_one_hot = tf.one_hot(labels, depth=sample_size)
+        loss = tf.nn.sigmoid_cross_entropy_with_logits(
+            labels=labels_one_hot, logits=logits
+        )
         loss = tf.reduce_mean(loss)
+        predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
+        tp = tf.reduce_mean(tf.cast(tf.equal(predictions, labels), tf.int32))
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
             optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
@@ -70,6 +74,7 @@ def model_builder(embedding_, context_):
             grads = tf.gradients(loss, var)
             clipped_grad, norm = tf.clip_by_global_norm(grads, 0.5)
             tf.summary.scalar("grad_norm", norm)
+            tf.summary.scalar("tp", tp)
             for v in tf.trainable_variables():
                 tf.summary.histogram(v.name, v)
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
@@ -83,9 +88,12 @@ def model_builder(embedding_, context_):
                 scaffold=scaffold,
             )
         if mode == tf.estimator.ModeKeys.EVAL:
-            return tf.estimator.EstimatorSpec(mode, loss=loss)
+            eval_metric_ops = {"tp": tf.metrics.mean(tp)}
+            return tf.estimator.EstimatorSpec(
+                mode, loss=loss, eval_metric_ops=eval_metric_ops
+            )
         if mode == tf.estimator.ModeKeys.PREDICT:
-            predictions = {}
+            predictions = {"predictions": predictions}
             return tf.estimator.EstimatorSpec(mode, predictions=predictions)
 
     return model
