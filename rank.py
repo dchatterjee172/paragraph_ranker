@@ -3,7 +3,7 @@ import numpy as np
 
 
 def model_builder(embedding_, context_):
-    num_units = 10
+    num_units = 50
 
     def model(features, labels, mode, params):
         is_training = mode == tf.estimator.ModeKeys.TRAIN
@@ -27,26 +27,32 @@ def model_builder(embedding_, context_):
         for name in sorted(features.keys()):
             tf.logging.info(f"  name = {name}, shape = {features[name].shape}")
 
-        context_id = features["context_id"]
+        context = features["context_id"]
         q = features["q"]
         batch_size = tf.shape(q)[0]
-        sample_size = tf.shape(context_id)[1]
+        sample_size = tf.shape(context)[1]
         q = tf.nn.embedding_lookup(embedding, q)
-        context = tf.nn.embedding_lookup(all_context, context_id)
+        context = tf.nn.embedding_lookup(all_context, context)
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
+            """q = tf.layers.separable_conv1d(
+                q, 3, 200, padding="same", activation=tf.nn.leaky_relu
+            )
+            q = tf.layers.batch_normalization(q, training=is_training)"""
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
         q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
-        # q = tf.layers.batch_normalization(q, training=is_training)
         with tf.variable_scope("c_birnn", initializer=tf.glorot_uniform_initializer):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
+            """context = tf.layers.separable_conv1d(
+                context, 5, 200, padding="same", activation=tf.nn.leaky_relu
+            )
+            context = tf.layers.batch_normalization(context, training=is_training)"""
             context = tf.nn.bidirectional_dynamic_rnn(
                 c_fw, c_bw, context, dtype=tf.float32
             )[0]
         context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
-        # context = tf.layers.batch_normalization(context, training=is_training)
         context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
         q = tf.layers.dropout(q, 0.2, training=is_training)
@@ -54,17 +60,22 @@ def model_builder(embedding_, context_):
         logits = tf.matmul(context, q, transpose_b=True)
         logits = tf.squeeze(logits, -1)
 
-        labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
-        one_hot = tf.one_hot(labels, depth=sample_size)
-        log_probs = tf.nn.log_softmax(logits, axis=-1)
-        loss = -tf.reduce_sum(one_hot * log_probs, axis=-1)
-        loss = tf.reduce_mean(loss)
+        # labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
+        # one_hot = tf.one_hot(labels, depth=sample_size)
+        # log_probs = tf.nn.log_softmax(logits, axis=-1)
+
+        ground_truth_docs = logits[:, 0]
+        other_docs = logits[:, 1:]
+        loss = tf.log_sigmoid(ground_truth_docs) + tf.reduce_mean(
+            -tf.log(tf.exp(other_docs) + 1), axis=-1
+        )  # log(p(d_actual|q)) - E[log(1-p(d_other|q))]
+        loss = -tf.reduce_mean(loss)
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
-            optimizer = tf.train.AdamOptimizer()
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.0001)
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
-            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.1)
+            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.5)
             tf.summary.scalar("grad_norm", norm)
             for v in tf.trainable_variables():
                 tf.summary.histogram(v.name, v)
@@ -138,8 +149,8 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
-            batch_size=25,
-            sample_size=10,
+            batch_size=30,
+            sample_size=100,
             total_context=len(contexts),
         ),
         steps=1,
@@ -150,8 +161,8 @@ def main(_):
         input_fn=input_fn_builder(
             input_file="train.tfrecord",
             is_training=True,
-            batch_size=25,
-            sample_size=10,
+            batch_size=30,
+            sample_size=100,
             total_context=len(contexts),
         ),
         max_steps=200_000,
