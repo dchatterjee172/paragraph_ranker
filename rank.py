@@ -59,11 +59,10 @@ def model_builder(embedding_, context_):
         context = tf.layers.dropout(context, 0.2, training=is_training)
         logits = tf.matmul(context, q, transpose_b=True)
         logits = tf.squeeze(logits, -1)
-
         labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
         labels = tf.one_hot(labels, depth=sample_size)
         loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=labels, logits=logits)
-        loss = -tf.reduce_mean(loss)
+        loss = tf.reduce_mean(loss)
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
             optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
