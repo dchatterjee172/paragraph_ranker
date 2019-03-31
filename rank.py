@@ -3,9 +3,10 @@ import numpy as np
 
 
 def model_builder(embedding_, context_):
-    num_units = 50
+    num_units = 10
 
     def model(features, labels, mode, params):
+        is_training = mode == tf.estimator.ModeKeys.TRAIN
         embedding = tf.get_variable(
             "embedding", shape=embedding_.shape, trainable=False, dtype=tf.float32
         )
@@ -33,22 +34,23 @@ def model_builder(embedding_, context_):
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context_id)
         context = tf.nn.embedding_lookup(embedding, context)
-        with tf.variable_scope("q_birnn"):
+        with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
-            q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
-        with tf.variable_scope("c_birnn"):
+        q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
+        # q = tf.layers.batch_normalization(q, training=is_training)
+        with tf.variable_scope("c_birnn", initializer=tf.glorot_uniform_initializer):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
             context = tf.nn.bidirectional_dynamic_rnn(
                 c_fw, c_bw, context, dtype=tf.float32
             )[0]
-            context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
-            context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
+        context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
+        # context = tf.layers.batch_normalization(context, training=is_training)
+        context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
-        is_training = mode == tf.estimator.ModeKeys.TRAIN
-        q = tf.layers.dropout(q, 0.4, training=is_training)
-        context = tf.layers.dropout(context, 0.4, training=is_training)
+        q = tf.layers.dropout(q, 0.2, training=is_training)
+        context = tf.layers.dropout(context, 0.2, training=is_training)
         logits = tf.matmul(context, q, transpose_b=True)
         logits = tf.squeeze(logits, -1)
 
@@ -62,13 +64,19 @@ def model_builder(embedding_, context_):
             optimizer = tf.train.AdamOptimizer()
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
-            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.5)
+            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.1)
             tf.summary.scalar("grad_norm", norm)
+            for v in tf.trainable_variables():
+                tf.summary.histogram(v.name, v)
+            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             train = optimizer.apply_gradients(
                 zip(clipped_grad, var), global_step=tf.train.get_or_create_global_step()
             )
             return tf.estimator.EstimatorSpec(
-                mode, loss=loss, train_op=train, scaffold=scaffold
+                mode,
+                loss=loss,
+                train_op=tf.group([train, update_ops]),
+                scaffold=scaffold,
             )
         if mode == tf.estimator.ModeKeys.EVAL:
             return tf.estimator.EstimatorSpec(mode, loss=loss)
@@ -131,7 +139,7 @@ def main(_):
             input_file="test.tfrecord",
             is_training=False,
             batch_size=25,
-            sample_size=200,
+            sample_size=10,
             total_context=len(contexts),
         ),
         steps=1,
@@ -143,7 +151,7 @@ def main(_):
             input_file="train.tfrecord",
             is_training=True,
             batch_size=25,
-            sample_size=200,
+            sample_size=10,
             total_context=len(contexts),
         ),
         max_steps=200_000,
