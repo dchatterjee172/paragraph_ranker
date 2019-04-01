@@ -68,8 +68,8 @@ for sample in tqdm(v1, total=98169, desc="processing"):
         if len(context) > 300:
             continue
         all_words.update(context)
-        all_context.append(context)
         all_context_id[context_id] = len(all_context)
+        all_context.append(context)
     question = [token.text for token in nlp(sample["question"])]
     if len(question) > 20:
         continue

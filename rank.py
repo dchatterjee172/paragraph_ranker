@@ -149,7 +149,7 @@ def main(_):
     emb = np.load("embedding.npy")
     print(emb.size)
     contexts = np.load("all_context.npy")
-    sample_size = 2
+    sample_size = 10
     model_fn = model_builder(emb, contexts, sample_size=sample_size)
     run_config = tf.estimator.RunConfig(
         model_dir="tmp",
