@@ -90,8 +90,8 @@ for c in tqdm(range(len(all_context)), total=len(all_context)):
     for t in range(len(all_context[c])):
         token = all_context[c][t]
         if token not in word_to_index and token in word_vecs:
-            all_context[c][t] = len(word_to_index) + 1
-            word_to_index[token] = len(word_to_index) + 1
+            all_context[c][t] = len(word_to_index) + 2
+            word_to_index[token] = len(word_to_index) + 2
             embedding_mat.append(word_vecs[token])
         elif token not in word_vecs:
             all_context[c][t] = 1
@@ -107,8 +107,8 @@ for i in range(2):
         for t in range(len(data[i][q][0])):
             token = data[i][q][0][t]
             if token not in word_to_index and token in word_vecs:
-                data[i][q][0][t] = len(word_to_index) + 1
-                word_to_index[token] = len(word_to_index) + 1
+                data[i][q][0][t] = len(word_to_index) + 2
+                word_to_index[token] = len(word_to_index) + 2
                 embedding_mat.append(word_vecs[token])
             elif token not in word_vecs:
                 data[i][q][0][t] = 1
