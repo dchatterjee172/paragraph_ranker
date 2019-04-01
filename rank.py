@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 
 
-def model_builder(embedding_, context_):
+def model_builder(embedding_, context_, sample_size):
     num_units = 50
 
     def model(features, labels, mode, params):
@@ -30,7 +30,6 @@ def model_builder(embedding_, context_):
         context = features["context_id"]
         q = features["q"]
         batch_size = tf.shape(q)[0]
-        sample_size = tf.shape(context)[1]
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context)
         context = tf.nn.embedding_lookup(embedding, context)
@@ -61,8 +60,8 @@ def model_builder(embedding_, context_):
         context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
         context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
-        # q = tf.layers.dropout(q, 0.2, training=is_training)
-        # context = tf.layers.dropout(context, 0.2, training=is_training)
+        q = tf.layers.dropout(q, 0.2, training=is_training)
+        context = tf.layers.dropout(context, 0.2, training=is_training)
         logits = tf.matmul(context, q, transpose_b=True) / tf.sqrt(
             tf.constant(num_units * 2.0)
         )
@@ -75,7 +74,7 @@ def model_builder(embedding_, context_):
         loss = loss[:, 0] + tf.reduce_mean(loss[:, 1:], axis=-1)
         loss = tf.reduce_mean(loss)
         predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
-        tp = tf.reduce_mean(tf.cast(tf.equal(predictions, labels), tf.int32))
+        tp = tf.reduce_mean(tf.to_float(tf.equal(predictions, labels)))
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
             optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
@@ -150,7 +149,8 @@ def main(_):
     emb = np.load("embedding.npy")
     print(emb.size)
     contexts = np.load("all_context.npy")
-    model_fn = model_builder(emb, contexts)
+    sample_size = 2
+    model_fn = model_builder(emb, contexts, sample_size=sample_size)
     run_config = tf.estimator.RunConfig(
         model_dir="tmp",
         save_summary_steps=100,
@@ -163,7 +163,7 @@ def main(_):
             input_file="test.tfrecord",
             is_training=False,
             batch_size=30,
-            sample_size=100,
+            sample_size=sample_size,
             total_context=len(contexts),
         ),
         steps=1,
@@ -175,7 +175,7 @@ def main(_):
             input_file="train.tfrecord",
             is_training=True,
             batch_size=30,
-            sample_size=100,
+            sample_size=sample_size,
             total_context=len(contexts),
         ),
         max_steps=200_000,
