@@ -40,9 +40,9 @@ def model_builder(embedding_, context_):
             )
             q = tf.layers.batch_normalization(q, training=is_training)"""
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
-            q = tf.contrib.layers.layer_norm(
+            """q = tf.contrib.layers.layer_norm(
                 q, begin_norm_axis=-1, begin_params_axis=-1
-            )
+            )"""
         q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
         with tf.variable_scope("c_birnn", initializer=tf.glorot_uniform_initializer):
             context = tf.reshape(
@@ -55,21 +55,24 @@ def model_builder(embedding_, context_):
             context = tf.nn.bidirectional_dynamic_rnn(
                 c_fw, c_bw, context, dtype=tf.float32
             )[0]
-            context = tf.contrib.layers.layer_norm(
+            """context = tf.contrib.layers.layer_norm(
                 context, begin_norm_axis=-1, begin_params_axis=-1
-            )
+            )"""
         context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
         context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
-        q = tf.layers.dropout(q, 0.2, training=is_training)
-        context = tf.layers.dropout(context, 0.2, training=is_training)
-        logits = tf.matmul(context, q, transpose_b=True)
+        # q = tf.layers.dropout(q, 0.2, training=is_training)
+        # context = tf.layers.dropout(context, 0.2, training=is_training)
+        logits = tf.matmul(context, q, transpose_b=True) / tf.sqrt(
+            tf.constant(num_units * 2.0)
+        )
         logits = tf.squeeze(logits, -1)
         labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
         labels_one_hot = tf.one_hot(labels, depth=sample_size)
         loss = tf.nn.sigmoid_cross_entropy_with_logits(
             labels=labels_one_hot, logits=logits
         )
+        loss = loss[:, 0] + tf.reduce_mean(loss[:, 1:], axis=-1)
         loss = tf.reduce_mean(loss)
         predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
         tp = tf.reduce_mean(tf.cast(tf.equal(predictions, labels), tf.int32))
@@ -82,6 +85,8 @@ def model_builder(embedding_, context_):
             tf.summary.scalar("grad_norm", norm)
             tf.summary.scalar("tp", tp)
             tf.summary.histogram("predictions", predictions)
+            tf.summary.histogram("logits", logits)
+            tf.summary.histogram("labels", tf.argmax(labels_one_hot, -1))
             for v in tf.trainable_variables():
                 tf.summary.histogram(v.name, v)
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
