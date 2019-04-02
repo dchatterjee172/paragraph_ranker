@@ -34,29 +34,15 @@ def model_builder(embedding_, context_, sample_size):
         context = tf.nn.embedding_lookup(all_context, context)
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
-            """q = tf.layers.separable_conv1d(
-                q, 3, 200, padding="same", activation=tf.nn.leaky_relu
-            )
-            q = tf.layers.batch_normalization(q, training=is_training)"""
             q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
-            """q = tf.contrib.layers.layer_norm(
-                q, begin_norm_axis=-1, begin_params_axis=-1
-            )"""
         q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
         with tf.variable_scope("c_birnn", initializer=tf.glorot_uniform_initializer):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
-            """context = tf.layers.separable_conv1d(
-                context, 5, 200, padding="same", activation=tf.nn.leaky_relu
-            )
-            context = tf.layers.batch_normalization(context, training=is_training)"""
             context = tf.nn.bidirectional_dynamic_rnn(
                 c_fw, c_bw, context, dtype=tf.float32
             )[0]
-            """context = tf.contrib.layers.layer_norm(
-                context, begin_norm_axis=-1, begin_params_axis=-1
-            )"""
         context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
         context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
