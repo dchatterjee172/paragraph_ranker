@@ -62,19 +62,19 @@ all_context = list()
 all_words = set()
 data = [[], []]
 for sample in tqdm(v1, total=98169, desc="processing"):
-    context_id = f"{sample['wiki_id']}_{sample['para_id']}"
-    if context_id not in all_context_id:
-        context = [token.text for token in nlp(sample["context"])]
+    context_text = sample["context"]
+    if context_text not in all_context_id:
+        context = [token.text for token in nlp(context_text)]
         if len(context) > 300:
             continue
         all_words.update(context)
-        all_context_id[context_id] = len(all_context)
+        all_context_id[context_text] = len(all_context)
         all_context.append(context)
     question = [token.text for token in nlp(sample["question"])]
     if len(question) > 20:
         continue
     all_words.update(question)
-    data[int(sample["is_train"])].append([question, all_context_id[context_id]])
+    data[int(sample["is_train"])].append([question, all_context_id[context_text]])
 
 print(len(data[0]), len(data[1]))
 
