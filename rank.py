@@ -41,7 +41,7 @@ def model_builder(embedding_, context_, sample_size):
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
             context = tf.layers.separable_conv1d(
-                context, 50, 5, padding="valid", activation=tf.nn.leaky_relu, strides=2
+                context, 50, 5, padding="same", activation=tf.nn.leaky_relu, strides=2
             )
             context = tf.layers.batch_normalization(context, training=is_training)
             context = tf.nn.bidirectional_dynamic_rnn(
