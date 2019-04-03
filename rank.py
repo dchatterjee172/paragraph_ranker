@@ -168,8 +168,8 @@ def main(_):
     tf.set_random_seed(1234)
     tf.logging.set_verbosity(tf.logging.INFO)
     emb = np.load("embedding.npy")
-    print(emb.size)
     contexts = np.load("all_context.npy")
+    print(emb.shape, contexts.shape)
     sample_size = 10
     model_fn = model_builder(emb, contexts, sample_size=sample_size)
     run_config = tf.estimator.RunConfig(
