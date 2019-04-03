@@ -67,28 +67,38 @@ def model_builder(embedding_, context_, sample_size):
                 context, 50, 5, padding="same", activation=tf.nn.leaky_relu, strides=2
             )
             context = tf.layers.batch_normalization(context, training=is_training)
-            c_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="c_fw")
-            c_fw = tf.nn.rnn_cell.DropoutWrapper(
-                c_fw,
-                (1 - dropout),
-                (1 - dropout),
-                variational_recurrent=True,
-                dtype=tf.float32,
-                input_size=context.get_shape()[-1],
-            )
-            c_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="c_bw")
-            c_bw = tf.nn.rnn_cell.DropoutWrapper(
-                c_bw,
-                (1 - dropout),
-                (1 - dropout),
-                variational_recurrent=True,
-                dtype=tf.float32,
-                input_size=context.get_shape()[-1],
-            )
-            context = tf.nn.bidirectional_dynamic_rnn(
-                c_fw, c_bw, context, dtype=tf.float32
-            )[0]
-        context = tf.concat([context[1][:, 0, :], context[0][:, -1, :]], axis=-1)
+            for i in range(2):
+                c_fw = tf.contrib.rnn.GRUBlockCellV2(
+                    num_units=num_units, name=f"c_fw_{i}"
+                )
+                c_fw = tf.nn.rnn_cell.DropoutWrapper(
+                    c_fw,
+                    (1 - dropout),
+                    (1 - dropout),
+                    variational_recurrent=True,
+                    dtype=tf.float32,
+                    input_size=context.get_shape()[-1],
+                )
+                c_bw = tf.contrib.rnn.GRUBlockCellV2(
+                    num_units=num_units, name=f"c_bw_{i}"
+                )
+                c_bw = tf.nn.rnn_cell.DropoutWrapper(
+                    c_bw,
+                    (1 - dropout),
+                    (1 - dropout),
+                    variational_recurrent=True,
+                    dtype=tf.float32,
+                    input_size=context.get_shape()[-1],
+                )
+                context = tf.concat(
+                    tf.nn.bidirectional_dynamic_rnn(
+                        c_fw, c_bw, context, dtype=tf.float32
+                    )[0],
+                    axis=2,
+                )
+        context = tf.concat(
+            [context[:, 0, :num_units], context[:, -1, num_units:]], axis=-1
+        )
         context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
         logits = tf.matmul(context, q, transpose_b=True) / tf.sqrt(
