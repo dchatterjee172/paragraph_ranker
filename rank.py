@@ -1,6 +1,14 @@
 import tensorflow as tf
 import numpy as np
 
+flags = tf.flags
+FLAGS = flags.FLAGS
+
+flags.DEFINE_string("model_dir", "./tmp", "Model Directory")
+flags.DEFINE_bool("train", True, "train?")
+flags.DEFINE_bool("eval", True, "eval?")
+flags.DEFINE_integer("sample_size", 10, "sample size")
+
 
 def model_builder(embedding_, context_, sample_size):
     num_units = 50
@@ -131,7 +139,9 @@ def model_builder(embedding_, context_, sample_size):
     return model
 
 
-def input_fn_builder(input_file, is_training, batch_size, sample_size, total_context):
+def input_fn_builder(
+    input_file, is_training, batch_size, sample_size, total_context, repeat=True
+):
     def input_fn():
         name_to_features = {
             "context_id": tf.FixedLenFeature([1], tf.int64),
@@ -148,7 +158,8 @@ def input_fn_builder(input_file, is_training, batch_size, sample_size, total_con
 
         d = tf.data.TFRecordDataset(input_file)
         drop_remainder = False
-        d = d.repeat()
+        if repeat:
+            d = d.repeat()
         if is_training:
             d = d.shuffle(buffer_size=100)
             drop_remainder = True
@@ -170,39 +181,56 @@ def main(_):
     emb = np.load("embedding.npy")
     contexts = np.load("all_context.npy")
     print(emb.shape, contexts.shape)
-    sample_size = 10
-    model_fn = model_builder(emb, contexts, sample_size=sample_size)
+    model_fn = model_builder(emb, contexts, sample_size=FLAGS.sample_size)
     run_config = tf.estimator.RunConfig(
-        model_dir="tmp",
+        model_dir=FLAGS.model_dir,
         save_summary_steps=100,
         save_checkpoints_steps=1000,
         keep_checkpoint_max=2,
         log_step_count_steps=100,
     )
-    eval_spec = tf.estimator.EvalSpec(
-        input_fn=input_fn_builder(
+    estimator = tf.estimator.Estimator(model_fn=model_fn, config=run_config)
+    if FLAGS.train:
+        eval_spec = tf.estimator.EvalSpec(
+            input_fn=input_fn_builder(
+                input_file="test.tfrecord",
+                is_training=False,
+                batch_size=30,
+                sample_size=FLAGS.sample_size,
+                total_context=len(contexts),
+            ),
+            steps=1,
+            start_delay_secs=0,
+            throttle_secs=0,
+        )
+        train_spec = tf.estimator.TrainSpec(
+            input_fn=input_fn_builder(
+                input_file="train.tfrecord",
+                is_training=True,
+                batch_size=30,
+                sample_size=FLAGS.sample_size,
+                total_context=len(contexts),
+            ),
+            max_steps=200_000,
+        )
+        tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+    if FLAGS.eval:
+        input_fn = input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
             batch_size=30,
-            sample_size=sample_size,
+            sample_size=FLAGS.sample_size,
             total_context=len(contexts),
-        ),
-        steps=1,
-        start_delay_secs=0,
-        throttle_secs=0,
-    )
-    train_spec = tf.estimator.TrainSpec(
-        input_fn=input_fn_builder(
-            input_file="train.tfrecord",
-            is_training=True,
-            batch_size=30,
-            sample_size=sample_size,
-            total_context=len(contexts),
-        ),
-        max_steps=200_000,
-    )
-    estimator = tf.estimator.Estimator(model_fn=model_fn, config=run_config)
-    tf.estimator.train_and_evaluate(estimator, train_spec, eval_spec)
+            repeat=False,
+        )
+        tp = 0
+        count = 1
+        for result in estimator.predict(input_fn, yield_single_examples=True):
+            count += 1
+            pred = int(result["predictions"])
+            if pred == 0:
+                tp += 1
+        print(f"tp {tp / count * 100}")
 
 
 if __name__ == "__main__":
