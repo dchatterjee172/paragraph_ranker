@@ -64,7 +64,12 @@ def model_builder(embedding_, context_, sample_size):
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
             context = tf.layers.separable_conv1d(
-                context, 50, 5, padding="same", activation=tf.nn.leaky_relu, strides=2
+                context,
+                num_units * 2,
+                5,
+                padding="same",
+                activation=tf.nn.leaky_relu,
+                strides=2,
             )
             context = tf.layers.batch_normalization(context, training=is_training)
             for i in range(2):
@@ -97,7 +102,7 @@ def model_builder(embedding_, context_, sample_size):
                     axis=2,
                 )
         context = tf.concat(
-            [context[:, 0, :num_units], context[:, -1, num_units:]], axis=-1
+            [context[:, 0, num_units:], context[:, -1, :num_units]], axis=-1
         )
         context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
         q = tf.expand_dims(q, -2)
