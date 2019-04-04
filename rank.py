@@ -65,16 +65,16 @@ def model_builder(embedding_, context_, sample_size):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
-            for i in range(2):
+            for i in range(1):
                 context = tf.layers.separable_conv1d(
-                    context,
-                    num_units * 2,
-                    7,
-                    padding="same",
-                    activation=tf.nn.leaky_relu,
-                    strides=2,
+                    context, num_units * 2, 7, padding="same", strides=2
                 )
                 context = tf.layers.batch_normalization(context, training=is_training)
+                score = tf.nn.softmax(
+                    tf.matmul(context, context, transpose_b=True)
+                    / tf.sqrt(tf.constant(num_units * 2.0))
+                )
+                context = tf.matmul(score, context)
                 c_fw = tf.contrib.rnn.GRUBlockCellV2(
                     num_units=num_units, name=f"c_fw_{i}"
                 )
@@ -251,6 +251,7 @@ def main(_):
             repeat=False,
         )
         tp = 0
+        tp_top_3 = 0
         count = 1
         failed = defaultdict(list)
         for result in estimator.predict(input_fn, yield_single_examples=True):
@@ -261,6 +262,7 @@ def main(_):
             unique_id = str(result["unique_id"])
             if pred == 0:
                 tp += 1
+                tp_top_3 += 1
             else:
                 ranked = sorted(
                     zip(context_id, logits), key=lambda x: x[1], reverse=True
@@ -268,6 +270,7 @@ def main(_):
                 for c, l in ranked[:3]:
                     if c == context_id[0]:
                         actual = True
+                        tp_top_3 += 1
                     else:
                         actual = False
                     failed[id_to_q[unique_id]].append(
@@ -278,6 +281,7 @@ def main(_):
                         }
                     )
         print(f"tp {tp / count * 100}")
+        print(f"tp_top_3 {tp_top_3 / count * 100}")
         with open("failed.json", "w") as f:
             json.dump(failed, f, indent=4)
 
