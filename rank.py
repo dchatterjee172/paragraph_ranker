@@ -164,37 +164,24 @@ def model_builder(embedding_, context_, sample_size):
 def input_fn_builder(
     input_file, is_training, batch_size, sample_size, total_context, repeat=True
 ):
+    arange = np.arange(0, total_context)
+
     def input_fn():
         name_to_features = {
             "context_id": tf.FixedLenFeature([1], tf.int64),
             "q": tf.FixedLenFeature([20], tf.int64),
             "unique_id": tf.FixedLenFeature([], tf.int64),
         }
+        arange_tensor = tf.constant(arange)
 
         def _decode_record(record, name_to_features):
             example = tf.parse_single_example(record, name_to_features)
             context_id = example["context_id"][0]
-            sample_right = tf.cast(
-                tf.round(
-                    (total_context - context_id)
-                    / total_context
-                    * tf.cast(sample_size, tf.float64)
-                ),
-                tf.int64,
+            sample = tf.concat(
+                [arange_tensor[:context_id], arange_tensor[context_id + 1 :]], axis=-1
             )
-            sample_left = sample_size - sample_right
-            sample_right = tf.random.uniform(
-                shape=[sample_right],
-                minval=context_id + 1,
-                maxval=total_context,
-                dtype=tf.int64,
-            )
-            sample_left = tf.random.uniform(
-                shape=[sample_left], minval=0, maxval=context_id, dtype=tf.int64
-            )
-            example["context_id"] = tf.concat(
-                [example["context_id"], sample_left, sample_right], axis=-1
-            )
+            sample = tf.random_shuffle(sample)[:sample_size]
+            example["context_id"] = tf.concat([example["context_id"], sample], axis=-1)
             return example
 
         d = tf.data.TFRecordDataset(input_file)
