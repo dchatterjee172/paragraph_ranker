@@ -173,10 +173,28 @@ def input_fn_builder(
 
         def _decode_record(record, name_to_features):
             example = tf.parse_single_example(record, name_to_features)
-            sample = tf.random.uniform(
-                shape=[sample_size - 1], maxval=total_context, dtype=tf.int64
+            context_id = example["context_id"][0]
+            sample_right = tf.cast(
+                tf.round(
+                    (total_context - context_id)
+                    / total_context
+                    * tf.cast(sample_size, tf.float64)
+                ),
+                tf.int64,
             )
-            example["context_id"] = tf.concat([example["context_id"], sample], axis=-1)
+            sample_left = sample_size - sample_right
+            sample_right = tf.random.uniform(
+                shape=[sample_right],
+                minval=context_id + 1,
+                maxval=total_context,
+                dtype=tf.int64,
+            )
+            sample_left = tf.random.uniform(
+                shape=[sample_left], minval=0, maxval=context_id, dtype=tf.int64
+            )
+            example["context_id"] = tf.concat(
+                [example["context_id"], sample_left, sample_right], axis=-1
+            )
             return example
 
         d = tf.data.TFRecordDataset(input_file)
@@ -252,7 +270,7 @@ def main(_):
         )
         tp = 0
         tp_top_3 = 0
-        count = 1
+        count = 0
         failed = defaultdict(list)
         for result in estimator.predict(input_fn, yield_single_examples=True):
             count += 1
@@ -263,14 +281,14 @@ def main(_):
             if pred == 0:
                 tp += 1
                 tp_top_3 += 1
-            else:
+                # else:
                 ranked = sorted(
                     zip(context_id, logits), key=lambda x: x[1], reverse=True
                 )
                 for c, l in ranked[:3]:
                     if c == context_id[0]:
                         actual = True
-                        tp_top_3 += 1
+                    #             tp_top_3 += 1
                     else:
                         actual = False
                     failed[id_to_q[unique_id]].append(
