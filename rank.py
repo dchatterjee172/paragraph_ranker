@@ -271,7 +271,7 @@ def main(_):
         tp = 0
         tp_top_3 = 0
         count = 0
-        failed = defaultdict(list)
+        res = defaultdict(dict)
         for result in estimator.predict(input_fn, yield_single_examples=True):
             count += 1
             pred = int(result["predictions"])
@@ -280,28 +280,30 @@ def main(_):
             unique_id = str(result["unique_id"])
             if pred == 0:
                 tp += 1
-                tp_top_3 += 1
-                # else:
-                ranked = sorted(
-                    zip(context_id, logits), key=lambda x: x[1], reverse=True
+                res[id_to_q[unique_id]]["tp"] = 1
+            else:
+                res[id_to_q[unique_id]]["tp"] = 0
+                res[id_to_q[unique_id]]["tp_top_3"] = 0
+            res[id_to_q[unique_id]]["para"] = list()
+            ranked = sorted(zip(context_id, logits), key=lambda x: x[1], reverse=True)
+            for c, l in ranked[:3]:
+                if c == context_id[0]:
+                    actual = True
+                    tp_top_3 += 1
+                    res[id_to_q[unique_id]]["tp_top_3"] = 1
+                else:
+                    actual = False
+                res[id_to_q[unique_id]]["para"].append(
+                    {
+                        "text": id_to_context[str(c)],
+                        "is_actual": actual,
+                        "logit": float(l),
+                    }
                 )
-                for c, l in ranked[:3]:
-                    if c == context_id[0]:
-                        actual = True
-                    #             tp_top_3 += 1
-                    else:
-                        actual = False
-                    failed[id_to_q[unique_id]].append(
-                        {
-                            "text": id_to_context[str(c)],
-                            "is_actual": actual,
-                            "logit": float(l),
-                        }
-                    )
         print(f"tp {tp / count * 100}")
         print(f"tp_top_3 {tp_top_3 / count * 100}")
         with open("failed.json", "w") as f:
-            json.dump(failed, f, indent=4)
+            json.dump(res, f, indent=4)
 
 
 if __name__ == "__main__":
