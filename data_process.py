@@ -3,6 +3,7 @@ import spacy
 from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
+import json
 
 
 def get_word2vec(word_set):
@@ -48,6 +49,7 @@ class FeatureWriter(object):
         features = dict()
         features["q"] = create_int_feature(feature[0])
         features["context_id"] = create_int_feature([feature[1]])
+        features["unique_id"] = create_int_feature([feature[2]])
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))
         self._writer.write(tf_example.SerializeToString())
@@ -58,10 +60,11 @@ class FeatureWriter(object):
 
 nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger"])
 all_context_id = dict()
+id_to_q = dict()
 all_context = list()
 all_words = set()
 data = [[], []]
-for sample in tqdm(v1, total=98169, desc="processing"):
+for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     context_text = sample["context"]
     if context_text not in all_context_id:
         context = [token.text for token in nlp(context_text)]
@@ -74,7 +77,8 @@ for sample in tqdm(v1, total=98169, desc="processing"):
     if len(question) > 20:
         continue
     all_words.update(question)
-    data[int(sample["is_train"])].append([question, all_context_id[context_text]])
+    id_to_q[i] = sample["question"]
+    data[int(sample["is_train"])].append([question, all_context_id[context_text], i])
 
 print(len(data[0]), len(data[1]))
 
@@ -82,7 +86,7 @@ np.random.shuffle(data[0])
 np.random.shuffle(data[1])
 
 word_vecs = get_word2vec(all_words)
-del all_words, all_context_id
+del all_words
 embedding_mat = list()
 word_to_index = dict()
 
@@ -124,3 +128,7 @@ embedding_mat.insert(0, [0] * 300)
 embedding_mat.insert(1, list(np.random.uniform(-0.05, 0.05, (300,))))
 np.save("embedding", np.array(embedding_mat))
 np.save("all_context", np.array(all_context))
+with open("id_to_context.json", "w") as f:
+    json.dump({v: k for k, v in all_context_id.items()}, f, indent=4),
+with open("id_to_question.json", "w") as f:
+    json.dump(id_to_q, f, indent=4)

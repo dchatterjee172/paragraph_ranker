@@ -1,5 +1,7 @@
 import tensorflow as tf
 import numpy as np
+import json
+from collections import defaultdict
 
 flags = tf.flags
 FLAGS = flags.FLAGS
@@ -32,11 +34,11 @@ def model_builder(embedding_, context_, sample_size):
         for name in sorted(features.keys()):
             tf.logging.info(f"  name = {name}, shape = {features[name].shape}")
 
-        context = features["context_id"]
+        context_id = features["context_id"]
         q = features["q"]
         batch_size = tf.shape(q)[0]
         q = tf.nn.embedding_lookup(embedding, q)
-        context = tf.nn.embedding_lookup(all_context, context)
+        context = tf.nn.embedding_lookup(all_context, context_id)
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
             q_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="q_fw")
@@ -148,7 +150,12 @@ def model_builder(embedding_, context_, sample_size):
                 mode, loss=loss, eval_metric_ops=eval_metric_ops
             )
         if mode == tf.estimator.ModeKeys.PREDICT:
-            predictions = {"predictions": predictions}
+            predictions = {
+                "predictions": predictions,
+                "logits": logits,
+                "context_id": context_id,
+                "unique_id": features["unique_id"],
+            }
             return tf.estimator.EstimatorSpec(mode, predictions=predictions)
 
     return model
@@ -161,6 +168,7 @@ def input_fn_builder(
         name_to_features = {
             "context_id": tf.FixedLenFeature([1], tf.int64),
             "q": tf.FixedLenFeature([20], tf.int64),
+            "unique_id": tf.FixedLenFeature([], tf.int64),
         }
 
         def _decode_record(record, name_to_features):
@@ -195,6 +203,10 @@ def main(_):
     tf.logging.set_verbosity(tf.logging.INFO)
     emb = np.load("embedding.npy")
     contexts = np.load("all_context.npy")
+    with open("id_to_context.json") as f:
+        id_to_context = json.load(f)
+    with open("id_to_question.json") as f:
+        id_to_q = json.load(f)
     print(emb.shape, contexts.shape)
     model_fn = model_builder(emb, contexts, sample_size=FLAGS.sample_size)
     run_config = tf.estimator.RunConfig(
@@ -240,12 +252,34 @@ def main(_):
         )
         tp = 0
         count = 1
+        failed = defaultdict(list)
         for result in estimator.predict(input_fn, yield_single_examples=True):
             count += 1
             pred = int(result["predictions"])
+            logits = result["logits"]
+            context_id = result["context_id"]
+            unique_id = str(result["unique_id"])
             if pred == 0:
                 tp += 1
+            else:
+                ranked = sorted(
+                    zip(context_id, logits), key=lambda x: x[1], reverse=True
+                )
+                for c, l in ranked[:3]:
+                    if c == context_id[0]:
+                        actual = True
+                    else:
+                        actual = False
+                    failed[id_to_q[unique_id]].append(
+                        {
+                            "text": id_to_context[str(c)],
+                            "is_actual": actual,
+                            "logit": float(l),
+                        }
+                    )
         print(f"tp {tp / count * 100}")
+        with open("failed.json", "w") as f:
+            json.dump(failed, f, indent=4)
 
 
 if __name__ == "__main__":
