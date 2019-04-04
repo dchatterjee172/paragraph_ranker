@@ -180,7 +180,7 @@ def input_fn_builder(
             sample = tf.concat(
                 [arange_tensor[:context_id], arange_tensor[context_id + 1 :]], axis=-1
             )
-            sample = tf.random_shuffle(sample)[:sample_size]
+            sample = tf.random_shuffle(sample)[: sample_size - 1]
             example["context_id"] = tf.concat([example["context_id"], sample], axis=-1)
             return example
 
