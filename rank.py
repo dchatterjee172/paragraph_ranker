@@ -11,7 +11,7 @@ flags.DEFINE_integer("sample_size", 10, "sample size")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 50
+    num_units = 75
 
     def model(features, labels, mode, params):
         is_training = mode == tf.estimator.ModeKeys.TRAIN
@@ -63,16 +63,16 @@ def model_builder(embedding_, context_, sample_size):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
-            context = tf.layers.separable_conv1d(
-                context,
-                num_units * 2,
-                5,
-                padding="same",
-                activation=tf.nn.leaky_relu,
-                strides=2,
-            )
-            context = tf.layers.batch_normalization(context, training=is_training)
             for i in range(2):
+                context = tf.layers.separable_conv1d(
+                    context,
+                    num_units * 2,
+                    7,
+                    padding="same",
+                    activation=tf.nn.leaky_relu,
+                    strides=2,
+                )
+                context = tf.layers.batch_normalization(context, training=is_training)
                 c_fw = tf.contrib.rnn.GRUBlockCellV2(
                     num_units=num_units, name=f"c_fw_{i}"
                 )
