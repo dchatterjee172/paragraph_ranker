@@ -10,6 +10,7 @@ flags.DEFINE_string("model_dir", "./tmp", "Model Directory")
 flags.DEFINE_bool("train", True, "train?")
 flags.DEFINE_bool("eval", True, "eval?")
 flags.DEFINE_integer("sample_size", 10, "sample size")
+flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
@@ -273,11 +274,11 @@ def main(_):
                 res[id_to_q[unique_id]]["tp_top_3"] = 0
             res[id_to_q[unique_id]]["para"] = list()
             ranked = sorted(zip(context_id, logits), key=lambda x: x[1], reverse=True)
-            for c, l in ranked[:3]:
+            for c, l in ranked[: FLAGS.top_k]:
                 if c == context_id[0]:
                     actual = True
                     tp_top_3 += 1
-                    res[id_to_q[unique_id]]["tp_top_3"] = 1
+                    res[id_to_q[unique_id]][f"tp_top_{FLAGS.top_k}"] = 1
                 else:
                     actual = False
                 res[id_to_q[unique_id]]["para"].append(
@@ -288,7 +289,7 @@ def main(_):
                     }
                 )
         print(f"tp {tp / count * 100}")
-        print(f"tp_top_3 {tp_top_3 / count * 100}")
+        print(f"tp_top_{FLAGS.top_k} {tp_top_3 / count * 100}")
         with open("failed.json", "w") as f:
             json.dump(res, f, indent=4)
 
