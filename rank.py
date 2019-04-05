@@ -257,7 +257,7 @@ def main(_):
             repeat=False,
         )
         tp = 0
-        tp_top_3 = 0
+        tp_top = 0
         count = 0
         res = defaultdict(dict)
         for result in estimator.predict(input_fn, yield_single_examples=True):
@@ -277,7 +277,7 @@ def main(_):
             for c, l in ranked[: FLAGS.top_k]:
                 if c == context_id[0]:
                     actual = True
-                    tp_top_3 += 1
+                    tp_top += 1
                     res[id_to_q[unique_id]][f"tp_top_{FLAGS.top_k}"] = 1
                 else:
                     actual = False
@@ -289,7 +289,7 @@ def main(_):
                     }
                 )
         print(f"tp {tp / count * 100}")
-        print(f"tp_top_{FLAGS.top_k} {tp_top_3 / count * 100}")
+        print(f"tp_top_{FLAGS.top_k} {tp_top / count * 100}")
         with open("failed.json", "w") as f:
             json.dump(res, f, indent=4)
 
