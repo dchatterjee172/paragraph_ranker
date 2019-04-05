@@ -271,7 +271,7 @@ def main(_):
                 res[id_to_q[unique_id]]["tp"] = 1
             else:
                 res[id_to_q[unique_id]]["tp"] = 0
-                res[id_to_q[unique_id]]["tp_top_3"] = 0
+                res[id_to_q[unique_id]][f"tp_top_{FLAGS.top_k}"] = 0
             res[id_to_q[unique_id]]["para"] = list()
             ranked = sorted(zip(context_id, logits), key=lambda x: x[1], reverse=True)
             for c, l in ranked[: FLAGS.top_k]:
