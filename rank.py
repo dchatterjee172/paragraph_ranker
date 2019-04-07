@@ -14,7 +14,30 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 75
+    num_units = 100
+    num_vector = 10
+
+    def _extractor(_input, num_vector, h_size, is_training):
+        all_input_ = []
+        for i in range(num_vector):
+            input_ = tf.layers.separable_conv1d(
+                _input, h_size, 7, padding="same", strides=2
+            )
+            input_ = tf.layers.batch_normalization(input_, training=is_training)
+            score = tf.nn.softmax(
+                tf.matmul(input_, input_, transpose_b=True)
+                / tf.sqrt(tf.constant(h_size, dtype=tf.float32))
+            )
+            input_ = tf.matmul(score, input_)
+            seq_len = tf.shape(input_)[-2]
+            p = tf.layers.dense(tf.reshape(input_, [-1, h_size]), 1)
+            p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
+            p = tf.expand_dims(p, -2)
+            input_ = tf.squeeze(tf.matmul(p, input_), -2)
+            all_input_.append(input_)
+
+        input_ = tf.concat(all_input_, -1)
+        return input_
 
     def model(features, labels, mode, params):
         is_training = mode == tf.estimator.ModeKeys.TRAIN
@@ -42,72 +65,28 @@ def model_builder(embedding_, context_, sample_size):
         context = tf.nn.embedding_lookup(all_context, context_id)
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
-            q_fw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="q_fw")
-            q_fw = tf.nn.rnn_cell.DropoutWrapper(
-                q_fw,
-                (1 - dropout),
-                (1 - dropout),
-                variational_recurrent=True,
-                dtype=tf.float32,
-                input_size=q.get_shape()[-1],
-            )
-            q_bw = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units, name="q_bw")
-            q_bw = tf.nn.rnn_cell.DropoutWrapper(
-                q_bw,
-                (1 - dropout),
-                (1 - dropout),
-                variational_recurrent=True,
-                dtype=tf.float32,
-                input_size=q.get_shape()[-1],
-            )
-            q = tf.nn.bidirectional_dynamic_rnn(q_fw, q_bw, q, dtype=tf.float32)[0]
+            rnns = []
+            for i in range(2):
+                r = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units // 2, name=f"{i}")
+                r = tf.nn.rnn_cell.DropoutWrapper(
+                    r,
+                    (1 - dropout),
+                    (1 - dropout),
+                    variational_recurrent=True,
+                    dtype=tf.float32,
+                    input_size=q.get_shape()[-1],
+                )
+                rnns.append(r)
+            q = tf.nn.bidirectional_dynamic_rnn(*rnns, q, dtype=tf.float32)[0]
         q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
-        with tf.variable_scope("c_birnn", initializer=tf.glorot_uniform_initializer):
+        with tf.variable_scope("c"):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
-            for i in range(1):
-                context = tf.layers.separable_conv1d(
-                    context, num_units * 2, 7, padding="same", strides=2
-                )
-                context = tf.layers.batch_normalization(context, training=is_training)
-                score = tf.nn.softmax(
-                    tf.matmul(context, context, transpose_b=True)
-                    / tf.sqrt(tf.constant(num_units * 2.0))
-                )
-                context = tf.matmul(score, context)
-                c_fw = tf.contrib.rnn.GRUBlockCellV2(
-                    num_units=num_units, name=f"c_fw_{i}"
-                )
-                c_fw = tf.nn.rnn_cell.DropoutWrapper(
-                    c_fw,
-                    (1 - dropout),
-                    (1 - dropout),
-                    variational_recurrent=True,
-                    dtype=tf.float32,
-                    input_size=context.get_shape()[-1],
-                )
-                c_bw = tf.contrib.rnn.GRUBlockCellV2(
-                    num_units=num_units, name=f"c_bw_{i}"
-                )
-                c_bw = tf.nn.rnn_cell.DropoutWrapper(
-                    c_bw,
-                    (1 - dropout),
-                    (1 - dropout),
-                    variational_recurrent=True,
-                    dtype=tf.float32,
-                    input_size=context.get_shape()[-1],
-                )
-                context = tf.concat(
-                    tf.nn.bidirectional_dynamic_rnn(
-                        c_fw, c_bw, context, dtype=tf.float32
-                    )[0],
-                    axis=2,
-                )
-        context = tf.concat(
-            [context[:, 0, num_units:], context[:, -1, :num_units]], axis=-1
-        )
-        context = tf.reshape(context, [batch_size, sample_size, num_units * 2])
+            context = _extractor(
+                context, num_vector, num_units // num_vector, is_training
+            )
+            context = tf.reshape(context, [batch_size, sample_size, -1])
         q = tf.expand_dims(q, -2)
         logits = tf.matmul(context, q, transpose_b=True) / tf.sqrt(
             tf.constant(num_units * 2.0)
