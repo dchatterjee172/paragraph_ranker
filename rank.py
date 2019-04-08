@@ -28,15 +28,20 @@ def model_builder(embedding_, context_, sample_size):
                 tf.matmul(input_, input_, transpose_b=True)
                 / tf.sqrt(tf.constant(h_size, dtype=tf.float32))
             )
-            input_ = tf.matmul(score, input_)
+            p = tf.matmul(score, input_)
             seq_len = tf.shape(input_)[-2]
-            p = tf.layers.dense(tf.reshape(input_, [-1, h_size]), 1)
+            p = tf.layers.dense(tf.reshape(p, [-1, h_size]), 1)
             p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
+            if is_training:
+                p = tf.layers.dropout(p, 0.1)
             p = tf.expand_dims(p, -2)
             input_ = tf.squeeze(tf.matmul(p, input_), -2)
             all_input_.append(input_)
 
         input_ = tf.concat(all_input_, -1)
+        input_ = tf.contrib.layers.layer_norm(
+            input_, begin_norm_axis=-1, begin_params_axis=-1
+        )
         return input_
 
     def model(features, labels, mode, params):
