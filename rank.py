@@ -244,6 +244,7 @@ def main(_):
         tp_top = 0
         count = 0
         res = defaultdict(dict)
+        mrr = 0
         for result in estimator.predict(input_fn, yield_single_examples=True):
             count += 1
             pred = int(result["predictions"])
@@ -258,11 +259,12 @@ def main(_):
                 res[id_to_q[unique_id]][f"tp_top_{FLAGS.top_k}"] = 0
             res[id_to_q[unique_id]]["para"] = list()
             ranked = sorted(zip(context_id, logits), key=lambda x: x[1], reverse=True)
-            for c, l in ranked[: FLAGS.top_k]:
+            for i, (c, l) in enumerate(ranked[: FLAGS.top_k]):
                 if c == context_id[0]:
                     actual = True
                     tp_top += 1
                     res[id_to_q[unique_id]][f"tp_top_{FLAGS.top_k}"] = 1
+                    mrr += 1 / (1 + i)
                 else:
                     actual = False
                 res[id_to_q[unique_id]]["para"].append(
@@ -274,6 +276,7 @@ def main(_):
                 )
         print(f"tp {tp / count * 100}")
         print(f"tp_top_{FLAGS.top_k} {tp_top / count * 100}")
+        print(f"mrr_{FLAGS.top_k} {mrr / count}")
         with open("failed.json", "w") as f:
             json.dump(res, f, indent=4)
 
