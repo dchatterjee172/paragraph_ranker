@@ -86,22 +86,9 @@ def model_builder(embedding_, context_, sample_size):
         batch_size = tf.shape(q)[0]
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context_id)
-        seq_len = tf.shape(context)[-1]
         context = tf.nn.embedding_lookup(embedding, context)
-        with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
-            rnns = []
-            for i in range(2):
-                r = tf.contrib.rnn.GRUBlockCellV2(num_units=num_units // 2, name=f"{i}")
-                r = tf.nn.rnn_cell.DropoutWrapper(
-                    r,
-                    (1 - dropout),
-                    (1 - dropout),
-                    variational_recurrent=True,
-                    dtype=tf.float32,
-                    input_size=q.get_shape()[-1],
-                )
-                rnns.append(r)
-            q = tf.nn.bidirectional_dynamic_rnn(*rnns, q, dtype=tf.float32)[0]
+        with tf.variable_scope("q", initializer=tf.glorot_uniform_initializer):
+            pass
         q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
         with tf.variable_scope("c"):
             context = tf.reshape(
