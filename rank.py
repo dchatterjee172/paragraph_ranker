@@ -18,15 +18,17 @@ def model_builder(embedding_, context_, sample_size):
     num_units = 100
     num_vector = 10
 
-    def _extractor(_input, num_vector, h_size, is_training, batch_size):
+    def _extractor(
+        _input, num_vector, h_size, is_training, batch_size, k_size=7, strides=2
+    ):
         all_input_ = []
         for i in range(num_vector):
             input_ = tf.layers.separable_conv1d(
                 _input,
                 h_size,
-                7,
+                k_size,
                 padding="same",
-                strides=2,
+                strides=strides,
                 activation=tf.nn.leaky_relu,
             )
             input_ = tf.layers.batch_normalization(input_, training=is_training)
