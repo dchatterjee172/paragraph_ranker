@@ -19,7 +19,14 @@ def model_builder(embedding_, context_, sample_size):
     num_vector = 10
 
     def _extractor(
-        _input, num_vector, h_size, is_training, batch_size, k_size=7, strides=2
+        _input,
+        num_vector,
+        h_size,
+        is_training,
+        batch_size,
+        k_size=7,
+        strides=2,
+        sample_size=sample_size,
     ):
         all_input_ = []
         for i in range(num_vector):
@@ -55,7 +62,7 @@ def model_builder(embedding_, context_, sample_size):
         input_ = tf.reshape(input_, [-1, num_vector, h_size])
         input_ = tf.layers.dropout(
             input_,
-            0.7,
+            0.5,
             noise_shape=[batch_size * sample_size, num_vector, 1],
             training=is_training,
         )
@@ -70,7 +77,6 @@ def model_builder(embedding_, context_, sample_size):
         all_context = tf.get_variable(
             "all_context", shape=context_.shape, trainable=False, dtype=tf.int32
         )
-        dropout = 0.3 if is_training else 0.0
 
         def init_fn(scaffold, sess):
             sess.run(embedding.initializer, {embedding.initial_value: embedding_})
@@ -87,9 +93,17 @@ def model_builder(embedding_, context_, sample_size):
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context_id)
         context = tf.nn.embedding_lookup(embedding, context)
-        with tf.variable_scope("q", initializer=tf.glorot_uniform_initializer):
-            pass
-        q = tf.concat((q[1][:, 0, :], q[0][:, -1, :]), axis=-1)
+        with tf.variable_scope("q"):
+            q = _extractor(
+                q,
+                num_vector,
+                num_units // num_vector,
+                is_training,
+                batch_size,
+                k_size=4,
+                strides=1,
+                sample_size=1,
+            )
         with tf.variable_scope("c"):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
