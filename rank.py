@@ -18,11 +18,16 @@ def model_builder(embedding_, context_, sample_size):
     num_units = 100
     num_vector = 10
 
-    def _extractor(_input, num_vector, h_size, is_training):
+    def _extractor(_input, num_vector, h_size, is_training, batch_size):
         all_input_ = []
         for i in range(num_vector):
             input_ = tf.layers.separable_conv1d(
-                _input, h_size, 7, padding="same", strides=2
+                _input,
+                h_size,
+                7,
+                padding="same",
+                strides=2,
+                activation=tf.nn.leaky_relu,
             )
             input_ = tf.layers.batch_normalization(input_, training=is_training)
             score = tf.nn.softmax(
@@ -31,10 +36,12 @@ def model_builder(embedding_, context_, sample_size):
             )
             p = tf.matmul(score, input_)
             seq_len = tf.shape(input_)[-2]
-            p = tf.layers.dense(tf.reshape(p, [-1, h_size]), 1)
+            p = tf.layers.dense(
+                tf.reshape(p, [-1, h_size]),
+                1,
+                kernel_initializer=tf.glorot_normal_initializer,
+            )
             p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
-            if is_training:
-                p = tf.layers.dropout(p, 0.1)
             p = tf.expand_dims(p, -2)
             input_ = tf.squeeze(tf.matmul(p, input_), -2)
             all_input_.append(input_)
@@ -43,6 +50,14 @@ def model_builder(embedding_, context_, sample_size):
         input_ = tf.contrib.layers.layer_norm(
             input_, begin_norm_axis=-1, begin_params_axis=-1
         )
+        input_ = tf.reshape(input_, [-1, num_vector, h_size])
+        input_ = tf.layers.dropout(
+            input_,
+            0.7,
+            noise_shape=[batch_size * sample_size, num_vector, 1],
+            training=is_training,
+        )
+        input_ = tf.reshape(input_, [-1, num_vector * h_size])
         return input_
 
     def model(features, labels, mode, params):
@@ -69,6 +84,7 @@ def model_builder(embedding_, context_, sample_size):
         batch_size = tf.shape(q)[0]
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context_id)
+        seq_len = tf.shape(context)[-1]
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q_birnn", initializer=tf.glorot_uniform_initializer):
             rnns = []
@@ -90,12 +106,12 @@ def model_builder(embedding_, context_, sample_size):
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
             context = _extractor(
-                context, num_vector, num_units // num_vector, is_training
+                context, num_vector, num_units // num_vector, is_training, batch_size
             )
             context = tf.reshape(context, [batch_size, sample_size, -1])
         q = tf.expand_dims(q, -2)
         logits = tf.matmul(context, q, transpose_b=True) / tf.sqrt(
-            tf.constant(num_units * 2.0)
+            tf.constant(num_units, dtype=tf.float32)
         )
         logits = tf.squeeze(logits, -1)
         labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
@@ -109,10 +125,10 @@ def model_builder(embedding_, context_, sample_size):
         tp = tf.reduce_mean(tf.to_float(tf.equal(predictions, labels)))
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
-            # optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
-            optimizer = AdamWeightDecayOptimizer(
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+            """optimizer = AdamWeightDecayOptimizer(
                 learning_rate=0.001,
-                weight_decay_rate=0.01,
+                weight_decay_rate=0.1,
                 beta_1=0.9,
                 beta_2=0.999,
                 epsilon=1e-6,
@@ -122,10 +138,10 @@ def model_builder(embedding_, context_, sample_size):
                     "bias",
                     "batch_norm",
                 ],
-            )
+            )"""
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
-            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.5)
+            clipped_grad, norm = tf.clip_by_global_norm(grads, 1)
             tf.summary.scalar("grad_norm", norm)
             tf.summary.scalar("tp", tp)
             tf.summary.histogram("predictions", predictions)
