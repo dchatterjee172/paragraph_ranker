@@ -17,6 +17,15 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 def model_builder(embedding_, context_, sample_size):
     num_units = 100
     num_vector = 10
+    pos_embedding_ = np.ones((300, 300), dtype=np.float32)
+    ls = 301
+    le = 301
+    for k in range(1, le):
+        for j in range(1, ls):
+            pos_embedding_[j - 1, k - 1] = (1.0 - j / ls) - (k / le) * (
+                1.0 - 2.0 * j / ls
+            )
+    pos_embedding_ = np.expand_dims(pos_embedding_, 0)
 
     def _extractor(
         _input,
@@ -74,19 +83,27 @@ def model_builder(embedding_, context_, sample_size):
         embedding = tf.get_variable(
             "embedding", shape=embedding_.shape, trainable=False, dtype=tf.float32
         )
+        pos_embedding = tf.get_variable(
+            "pos_embedding",
+            shape=pos_embedding_.shape,
+            trainable=False,
+            dtype=tf.float32,
+        )
         all_context = tf.get_variable(
             "all_context", shape=context_.shape, trainable=False, dtype=tf.int32
         )
 
         def init_fn(scaffold, sess):
             sess.run(embedding.initializer, {embedding.initial_value: embedding_})
+            sess.run(
+                pos_embedding.initializer, {pos_embedding.initial_value: pos_embedding_}
+            )
             sess.run(all_context.initializer, {all_context.initial_value: context_})
             tf.logging.info("embedding initialized")
 
         tf.logging.info("*** Features ***")
         for name in sorted(features.keys()):
             tf.logging.info(f"  name = {name}, shape = {features[name].shape}")
-
         context_id = features["context_id"]
         q = features["q"]
         batch_size = tf.shape(q)[0]
@@ -94,6 +111,10 @@ def model_builder(embedding_, context_, sample_size):
         context = tf.nn.embedding_lookup(all_context, context_id)
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q"):
+            q = q + pos_embedding[:, :20, :]
+            q = tf.contrib.layers.layer_norm(
+                q, begin_norm_axis=-1, begin_params_axis=-1
+            )
             q = _extractor(
                 q,
                 num_vector,
@@ -107,6 +128,10 @@ def model_builder(embedding_, context_, sample_size):
         with tf.variable_scope("c"):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
+            )
+            context = context + pos_embedding
+            context = tf.contrib.layers.layer_norm(
+                context, begin_norm_axis=-1, begin_params_axis=-1
             )
             context = _extractor(
                 context, num_vector, num_units // num_vector, is_training, batch_size
