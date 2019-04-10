@@ -50,6 +50,7 @@ class FeatureWriter(object):
         features["q"] = create_int_feature(feature[0])
         features["context_id"] = create_int_feature([feature[1]])
         features["unique_id"] = create_int_feature([feature[2]])
+        features["q_len"] = create_int_feature([feature[3]])
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))
         self._writer.write(tf_example.SerializeToString())
@@ -64,6 +65,8 @@ id_to_q = dict()
 all_context = list()
 all_words = set()
 data = [[], []]
+context_len = []
+question_len = []
 for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     context_text = sample["context"]
     if context_text not in all_context_id:
@@ -73,12 +76,15 @@ for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
         all_words.update(context)
         all_context_id[context_text] = len(all_context)
         all_context.append(context)
+        context_len.append(len(context))
     question = [token.text for token in nlp(sample["question"])]
     if len(question) > 20:
         continue
     all_words.update(question)
     id_to_q[i] = sample["question"]
-    data[int(sample["is_train"])].append([question, all_context_id[context_text], i])
+    data[int(sample["is_train"])].append(
+        [question, all_context_id[context_text], i, len(question)]
+    )
 
 print(len(data[0]), len(data[1]))
 
@@ -128,6 +134,7 @@ embedding_mat.insert(0, [0] * 300)
 embedding_mat.insert(1, list(np.random.uniform(-0.05, 0.05, (300,))))
 np.save("embedding", np.array(embedding_mat))
 np.save("all_context", np.array(all_context))
+np.save("context_len", np.array(context_len))
 with open("id_to_context.json", "w") as f:
     json.dump({v: k for k, v in all_context_id.items()}, f, indent=4),
 with open("id_to_question.json", "w") as f:
