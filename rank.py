@@ -17,9 +17,9 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 def model_builder(embedding_, context_, sample_size):
     num_units = 128
     num_vector = 8
-    pos_embedding_ = np.ones((300, 300), dtype=np.float32)
     ls = 151
-    le = num_units // num_vector
+    le = num_units // num_vector + 1
+    pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
     for k in range(1, le):
         for j in range(1, ls):
             pos_embedding_[j - 1, k - 1] = (1.0 - j / ls) - (k / le) * (
