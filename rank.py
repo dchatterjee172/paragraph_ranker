@@ -299,7 +299,7 @@ def main(_):
                 input_file="train.tfrecord",
                 is_training=True,
                 batch_size=30,
-                sample_size=FLAGS.sample_size,
+                sample_size=FLAGS.sample_size - 1,
                 total_context=len(contexts),
             ),
             max_steps=200_000,
