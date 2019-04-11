@@ -16,7 +16,7 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 def model_builder(embedding_, context_, sample_size):
     num_units = 300
-    num_vector = 6
+    num_vector = 2
     ls = 151
     le = num_units // num_vector + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
