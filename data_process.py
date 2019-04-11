@@ -4,6 +4,7 @@ from tqdm import tqdm
 import numpy as np
 import tensorflow as tf
 import json
+from collections import OrderedDict as od
 
 
 def get_word2vec(word_set):
@@ -32,9 +33,10 @@ def get_word2vec(word_set):
 
 
 class FeatureWriter(object):
-    def __init__(self, filename):
+    def __init__(self, filename, wiki_start_end):
         self.filename = filename
         self.num_features = 0
+        self.wiki_start_end = wiki_start_end
         self._writer = tf.python_io.TFRecordWriter(filename)
 
     def process_feature(self, feature):
@@ -51,6 +53,7 @@ class FeatureWriter(object):
         features["context_id"] = create_int_feature([feature[1]])
         features["unique_id"] = create_int_feature([feature[2]])
         features["q_len"] = create_int_feature([feature[3]])
+        features["wiki_start_end"] = create_int_feature(self.wiki_start_end[feature[4]])
 
         tf_example = tf.train.Example(features=tf.train.Features(feature=features))
         self._writer.write(tf_example.SerializeToString())
@@ -59,6 +62,7 @@ class FeatureWriter(object):
         self._writer.close()
 
 
+v1 = sorted(v1, key=lambda x: x["wiki_id"])
 nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger"])
 all_context_id = dict()
 id_to_q = dict()
@@ -67,8 +71,16 @@ all_words = set()
 data = [[], []]
 context_len = []
 question_len = []
+wiki_start_end = od()
 for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     context_text = sample["context"]
+    if sample["wiki_id"] not in wiki_start_end:
+        wiki_start_end[sample["wiki_id"]] = [len(all_context)]
+        try:
+            last_wiki_id = next(reversed(wiki_start_end))
+            wiki_start_end[last_wiki_id].append(len(all_context) - 1)
+        except StopIteration:
+            pass
     if context_text not in all_context_id:
         context = [token.text for token in nlp(context_text)]
         if len(context) > 300:
@@ -83,7 +95,7 @@ for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     all_words.update(question)
     id_to_q[i] = sample["question"]
     data[int(sample["is_train"])].append(
-        [question, all_context_id[context_text], i, len(question)]
+        [question, all_context_id[context_text], i, len(question), sample["wiki_id"]]
     )
 
 print(len(data[0]), len(data[1]))
@@ -110,7 +122,10 @@ for c in tqdm(range(len(all_context)), total=len(all_context)):
     if len(all_context[c]) < 300:
         all_context[c] += [0] * (300 - len(all_context[c]))
 
-writers = (FeatureWriter("test.tfrecord"), FeatureWriter("train.tfrecord"))
+writers = (
+    FeatureWriter("test.tfrecord", wiki_start_end),
+    FeatureWriter("train.tfrecord", wiki_start_end),
+)
 
 for i in range(2):
     for q in tqdm(range(len(data[i])), total=len(data[i])):
