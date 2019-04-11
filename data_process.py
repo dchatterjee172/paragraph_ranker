@@ -97,6 +97,8 @@ for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     data[int(sample["is_train"])].append(
         [question, all_context_id[context_text], i, len(question), sample["wiki_id"]]
     )
+last_wiki_id = next(reversed(wiki_start_end))
+wiki_start_end[last_wiki_id].append(len(all_context) - 1)
 
 print(len(data[0]), len(data[1]))
 
