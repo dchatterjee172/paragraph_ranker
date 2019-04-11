@@ -75,12 +75,12 @@ wiki_start_end = od()
 for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     context_text = sample["context"]
     if sample["wiki_id"] not in wiki_start_end:
-        wiki_start_end[sample["wiki_id"]] = [len(all_context)]
         try:
             last_wiki_id = next(reversed(wiki_start_end))
             wiki_start_end[last_wiki_id].append(len(all_context) - 1)
         except StopIteration:
             pass
+        wiki_start_end[sample["wiki_id"]] = [len(all_context)]
     if context_text not in all_context_id:
         context = [token.text for token in nlp(context_text)]
         if len(context) > 300:

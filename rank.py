@@ -208,23 +208,39 @@ def input_fn_builder(
     input_file, is_training, batch_size, sample_size, total_context, repeat=True
 ):
     arange = np.arange(0, total_context)
+    sample_size_same_wiki = int(0.5 * sample_size)
 
     def input_fn():
         name_to_features = {
             "context_id": tf.FixedLenFeature([1], tf.int64),
             "q": tf.FixedLenFeature([20], tf.int64),
             "unique_id": tf.FixedLenFeature([], tf.int64),
+            "wiki_start_end": tf.FixedLenFeature([2], tf.int64),
         }
         arange_tensor = tf.constant(arange)
 
         def _decode_record(record, name_to_features):
             example = tf.parse_single_example(record, name_to_features)
             context_id = example["context_id"][0]
-            sample = tf.concat(
-                [arange_tensor[:context_id], arange_tensor[context_id + 1 :]], axis=-1
+            start, end = tf.unstack(example["wiki_start_end"])
+            sample_same_wiki = tf.concat(
+                [
+                    arange_tensor[start:context_id],
+                    arange_tensor[context_id + 1 : end + 1],
+                ],
+                axis=-1,
             )
-            sample = tf.random_shuffle(sample)[: sample_size - 1]
-            example["context_id"] = tf.concat([example["context_id"], sample], axis=-1)
+            sample_other_wiki = tf.concat(
+                [arange_tensor[:start], arange_tensor[end + 1 :]], axis=-1
+            )
+            sample_same_wiki = tf.random_shuffle(sample_same_wiki)[
+                :sample_size_same_wiki
+            ]
+            sample_size_other = sample_size - tf.shape(sample_same_wiki)[0]
+            sample_other_wiki = tf.random_shuffle(sample_other_wiki)[:sample_size_other]
+            example["context_id"] = tf.concat(
+                [example["context_id"], sample_same_wiki, sample_other_wiki], axis=-1
+            )
             return example
 
         d = tf.data.TFRecordDataset(input_file)
@@ -271,7 +287,7 @@ def main(_):
                 input_file="test.tfrecord",
                 is_training=False,
                 batch_size=30,
-                sample_size=FLAGS.sample_size,
+                sample_size=FLAGS.sample_size - 1,
                 total_context=len(contexts),
             ),
             steps=1,
@@ -293,8 +309,8 @@ def main(_):
         input_fn = input_fn_builder(
             input_file="test.tfrecord",
             is_training=False,
-            batch_size=30,
-            sample_size=FLAGS.sample_size,
+            batch_size=2,
+            sample_size=FLAGS.sample_size - 1,
             total_context=len(contexts),
             repeat=False,
         )
