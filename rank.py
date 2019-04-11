@@ -15,8 +15,8 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 128
-    num_vector = 8
+    num_units = 300
+    num_vector = 6
     ls = 151
     le = num_units // num_vector + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
@@ -49,7 +49,7 @@ def model_builder(embedding_, context_, sample_size):
                 activation=tf.nn.leaky_relu,
             )
             seq_len = tf.shape(input_)[-2]
-            input_ = input_ + pos[:, :seq_len, :]
+            # input_ = input_ + pos[:, :seq_len, :]
             input_ = tf.layers.batch_normalization(input_, training=is_training)
             score = tf.nn.softmax(
                 tf.matmul(input_, input_, transpose_b=True)
