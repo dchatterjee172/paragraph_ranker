@@ -208,7 +208,7 @@ def input_fn_builder(
     input_file, is_training, batch_size, sample_size, total_context, repeat=True
 ):
     arange = np.arange(0, total_context)
-    sample_size_same_wiki = int(0.5 * sample_size)
+    sample_size_same_wiki = int(0.4 * sample_size)
 
     def input_fn():
         name_to_features = {
