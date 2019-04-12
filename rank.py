@@ -30,54 +30,38 @@ def model_builder(embedding_, context_, sample_size):
     def _extractor(
         _input,
         num_vector,
-        h_size,
         is_training,
-        batch_size,
         pos,
         k_size=7,
         strides=2,
         sample_size=sample_size,
     ):
-        all_input_ = []
-        for i in range(num_vector):
-            input_ = tf.layers.separable_conv1d(
-                _input,
-                h_size,
-                k_size,
-                padding="same",
-                strides=strides,
-                activation=tf.nn.leaky_relu,
-            )
-            seq_len = tf.shape(input_)[-2]
-            # input_ = input_ + pos[:, :seq_len, :]
-            input_ = tf.layers.batch_normalization(input_, training=is_training)
-            score = tf.nn.softmax(
-                tf.matmul(input_, input_, transpose_b=True)
-                / tf.sqrt(tf.constant(h_size, dtype=tf.float32))
-            )
-            p = tf.matmul(score, input_)
-            p = tf.layers.dense(
-                tf.reshape(p, [-1, h_size]),
-                1,
-                kernel_initializer=tf.glorot_normal_initializer,
-            )
-            p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
-            p = tf.expand_dims(p, -2)
-            input_ = tf.squeeze(tf.matmul(p, input_), -2)
-            all_input_.append(input_)
-
-        input_ = tf.concat(all_input_, -1)
-        input_ = tf.contrib.layers.layer_norm(
-            input_, begin_norm_axis=-1, begin_params_axis=-1
+        input_ = tf.layers.separable_conv1d(
+            _input,
+            num_units * num_vector,
+            k_size,
+            padding="same",
+            strides=strides,
+            activation=tf.nn.leaky_relu,
         )
-        input_ = tf.reshape(input_, [-1, num_vector, h_size])
-        input_ = tf.layers.dropout(
-            input_,
-            0.5,
-            noise_shape=[batch_size * sample_size, num_vector, 1],
-            training=is_training,
+        input_ = tf.layers.batch_normalization(input_, training=is_training)
+        # input_ = input_ + pos[:, :seq_len, :]
+        seq_len = tf.shape(input_)[-2]
+        input_ = tf.reshape(input_, [-1, num_vector, seq_len, num_units])
+        score = tf.nn.softmax(
+            tf.matmul(input_, input_, transpose_b=True)
+            / tf.sqrt(tf.constant(num_units, dtype=tf.float32))
         )
-        input_ = tf.reshape(input_, [-1, num_vector * h_size])
+        p = tf.matmul(score, input_)
+        p = tf.reshape(p, [-1, num_units * num_vector])
+        p = tf.layers.dense(p, 1, kernel_initializer=tf.glorot_normal_initializer)
+        p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
+        p = tf.expand_dims(p, -2)
+        input_ = tf.reshape(input_, [-1, seq_len, num_units * num_vector])
+        input_ = tf.squeeze(tf.matmul(p, input_), -2)
+        input_ = tf.layers.dense(
+            input_, num_units, kernel_initializer=tf.glorot_normal_initializer
+        )
         return input_
 
     def model(features, labels, mode, params):
@@ -116,9 +100,7 @@ def model_builder(embedding_, context_, sample_size):
             q = _extractor(
                 q,
                 num_vector,
-                num_units // num_vector,
                 is_training,
-                batch_size,
                 pos_embedding,
                 k_size=4,
                 strides=1,
@@ -128,14 +110,7 @@ def model_builder(embedding_, context_, sample_size):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
-            context = _extractor(
-                context,
-                num_vector,
-                num_units // num_vector,
-                is_training,
-                batch_size,
-                pos_embedding,
-            )
+            context = _extractor(context, num_vector, is_training, pos_embedding)
             context = tf.reshape(context, [batch_size, sample_size, -1])
         q = tf.expand_dims(q, -2)
         logits = tf.matmul(context, q, transpose_b=True) / tf.sqrt(
