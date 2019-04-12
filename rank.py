@@ -37,14 +37,10 @@ def model_builder(embedding_, context_, sample_size):
         sample_size=sample_size,
     ):
         input_ = tf.layers.separable_conv1d(
-            _input,
-            num_units * num_vector,
-            k_size,
-            padding="same",
-            strides=strides,
-            activation=tf.nn.leaky_relu,
+            _input, num_units * num_vector, k_size, padding="same", strides=strides
         )
         input_ = tf.layers.batch_normalization(input_, training=is_training)
+        input_ = tf.nn.relu(input_)
         # input_ = input_ + pos[:, :seq_len, :]
         seq_len = tf.shape(input_)[-2]
         input_ = tf.reshape(input_, [-1, num_vector, seq_len, num_units])
@@ -53,7 +49,7 @@ def model_builder(embedding_, context_, sample_size):
             / tf.sqrt(tf.constant(num_units, dtype=tf.float32))
         )
         p = tf.matmul(score, input_)
-        p = tf.reshape(p, [-1, num_units * num_vector])
+        p = tf.reshape(p, [-1, num_vector * num_units])
         p = tf.layers.dense(p, 1, kernel_initializer=tf.glorot_normal_initializer)
         p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
         p = tf.expand_dims(p, -2)
@@ -62,6 +58,11 @@ def model_builder(embedding_, context_, sample_size):
         input_ = tf.layers.dense(
             input_, num_units, kernel_initializer=tf.glorot_normal_initializer
         )
+        input_ = tf.reshape(input_, [-1, 2, num_units // 2])
+        input_ = tf.layers.dropout(
+            input_, 0.5, training=is_training, noise_shape=[tf.shape(input_)[0], 2, 1]
+        )
+        input_ = tf.reshape(input_, [-1, num_units])
         return input_
 
     def model(features, labels, mode, params):
