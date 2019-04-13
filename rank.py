@@ -15,8 +15,8 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 300
-    num_vector = 2
+    num_units = 100
+    num_vector = 9
     ls = 151
     le = num_units // num_vector + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
@@ -56,12 +56,12 @@ def model_builder(embedding_, context_, sample_size):
         p = tf.layers.dense(p, 1, kernel_initializer=tf.glorot_normal_initializer)
         p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
         p = tf.expand_dims(p, -2)
+        input_ = tf.transpose(input_, [0, 2, 1, 3])
         input_ = tf.reshape(input_, [-1, seq_len, num_units * num_vector])
         input_ = tf.squeeze(tf.matmul(p, input_), -2)
         input_ = tf.layers.dense(
             input_, num_units, kernel_initializer=tf.glorot_normal_initializer
         )
-        input_ = tf.layers.dropout(input_, 0.0, training=is_training)
         return input_
 
     def model(features, labels, mode, params):
