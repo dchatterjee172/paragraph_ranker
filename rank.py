@@ -36,33 +36,7 @@ def model_builder(embedding_, context_, sample_size):
         strides=2,
         sample_size=sample_size,
     ):
-        input_ = tf.layers.separable_conv1d(
-            _input, num_units * num_vector, k_size, padding="same", strides=strides
-        )
-        input_ = tf.layers.batch_normalization(input_, training=is_training)
-        if k_size == 7:
-            input_ = tf.layers.max_pooling1d(input_, k_size, strides)
-        # input_ = input_ + pos[:, :seq_len, :]
-        seq_len = tf.shape(input_)[-2]
-        input_ = tf.reshape(input_, [-1, seq_len, num_vector, num_units])
-        input_ = tf.transpose(input_, [0, 2, 1, 3])
-        score = tf.nn.softmax(
-            tf.matmul(input_, input_, transpose_b=True)
-            / tf.sqrt(tf.constant(num_units, dtype=tf.float32))
-        )
-        p = tf.matmul(score, input_)
-        p = tf.transpose(p, [0, 2, 1, 3])
-        p = tf.reshape(p, [-1, num_vector * num_units])
-        p = tf.layers.dense(p, 1, kernel_initializer=tf.glorot_normal_initializer)
-        p = tf.nn.softmax(tf.reshape(p, [-1, seq_len]))
-        p = tf.expand_dims(p, -2)
-        input_ = tf.transpose(input_, [0, 2, 1, 3])
-        input_ = tf.reshape(input_, [-1, seq_len, num_units * num_vector])
-        input_ = tf.squeeze(tf.matmul(p, input_), -2)
-        input_ = tf.layers.dense(
-            input_, num_units, kernel_initializer=tf.glorot_normal_initializer
-        )
-        return input_
+        pass
 
     def model(features, labels, mode, params):
         is_training = mode == tf.estimator.ModeKeys.TRAIN
@@ -128,10 +102,10 @@ def model_builder(embedding_, context_, sample_size):
         tp = tf.reduce_mean(tf.to_float(tf.equal(predictions, labels)))
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
-            optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
-            """optimizer = AdamWeightDecayOptimizer(
+            # optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+            optimizer = AdamWeightDecayOptimizer(
                 learning_rate=0.001,
-                weight_decay_rate=0.1,
+                weight_decay_rate=0.01,
                 beta_1=0.9,
                 beta_2=0.999,
                 epsilon=1e-6,
@@ -141,7 +115,7 @@ def model_builder(embedding_, context_, sample_size):
                     "bias",
                     "batch_norm",
                 ],
-            )"""
+            )
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
             clipped_grad, norm = tf.clip_by_global_norm(grads, 1)
