@@ -102,8 +102,8 @@ def model_builder(embedding_, context_, sample_size):
         tp = tf.reduce_mean(tf.to_float(tf.equal(predictions, labels)))
         if mode == tf.estimator.ModeKeys.TRAIN:
             scaffold = tf.train.Scaffold(init_fn=init_fn)
-            # optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
-            optimizer = AdamWeightDecayOptimizer(
+            optimizer = tf.train.AdamOptimizer(learning_rate=0.001)
+            """optimizer = AdamWeightDecayOptimizer(
                 learning_rate=0.001,
                 weight_decay_rate=0.01,
                 beta_1=0.9,
@@ -115,7 +115,7 @@ def model_builder(embedding_, context_, sample_size):
                     "bias",
                     "batch_norm",
                 ],
-            )
+            )"""
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
             clipped_grad, norm = tf.clip_by_global_norm(grads, 1)
