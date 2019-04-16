@@ -15,9 +15,9 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 300
+    num_units = 200
     num_vector = 10
-    ls = 151
+    ls = 301
     le = num_units + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
     for k in range(1, le):
@@ -50,7 +50,7 @@ def model_builder(embedding_, context_, sample_size):
         )
         input_q = tf.layers.dropout(
             input_q,
-            0.9,
+            0.0,
             training=is_training,
             noise_shape=[batch_size, seq_len, num_vector, 1],
         )
@@ -67,21 +67,27 @@ def model_builder(embedding_, context_, sample_size):
         )
         input_v = tf.layers.dropout(
             input_v,
-            0.9,
+            0.0,
             training=is_training,
             noise_shape=[batch_size, seq_len, num_vector, 1],
         )
         input_v = tf.transpose(input_v, (0, 2, 1, 3))
         input_ = tf.matmul(score, input_v)
-        input_ = tf.transpose(input_, (0, 2, 1, 3))
-        input_ = tf.reshape(input_, [-1, num_units])
-        p = tf.layers.dense(input_, 1, kernel_initializer=tf.glorot_normal_initializer)
-        p = tf.reshape(p, [-1, seq_len])
+        p = tf.transpose(input_, (0, 2, 1, 3))
+        p = tf.reshape(p, [-1, num_units])
+        p = tf.layers.dense(
+            p, num_vector, kernel_initializer=tf.glorot_normal_initializer
+        )
+        p = tf.reshape(p, [-1, seq_len, num_vector])
+        p = tf.transpose(p, [0, 2, 1])
         p = tf.nn.softmax(p)
-        p = tf.expand_dims(p, 1)
-        input_ = tf.reshape(input_, [-1, seq_len, num_units])
+        p = tf.expand_dims(p, 2)
         input_ = tf.matmul(p, input_)
         input_ = tf.squeeze(input_, -2)
+        input_ = tf.layers.dropout(
+            input_, 0.5, training=is_training, noise_shape=[batch_size, num_vector, 1]
+        )
+        input_ = tf.reshape(input_, [-1, num_units])
         return input_
 
     def model(features, labels, mode, params):
