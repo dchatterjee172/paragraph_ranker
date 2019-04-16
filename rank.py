@@ -15,10 +15,10 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 100
-    num_vector = 9
+    num_units = 300
+    num_vector = 10
     ls = 151
-    le = num_units // num_vector + 1
+    le = num_units + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
     for k in range(1, le):
         for j in range(1, ls):
@@ -27,16 +27,62 @@ def model_builder(embedding_, context_, sample_size):
             )
     pos_embedding_ = np.expand_dims(pos_embedding_, 0) / 2.0
 
-    def _extractor(
-        _input,
-        num_vector,
-        is_training,
-        pos,
-        k_size=7,
-        strides=2,
-        sample_size=sample_size,
-    ):
-        pass
+    def _extractor(_input, num_vector, is_training, pos, k_size=7, strides=2):
+        input_ = tf.layers.separable_conv1d(
+            _input, num_units, k_size, padding="same", strides=strides
+        )
+        seq_len = tf.shape(input_)[-2]
+        batch_size = tf.shape(input_)[0]
+        input_ = tf.layers.batch_normalization(input_, training=is_training)
+        input_ = tf.nn.relu(input_)
+        input_ = tf.reshape(input_, [-1, num_units])
+        input_q = tf.reshape(input_, [-1, seq_len, num_units])
+        input_q = input_q + pos[:, :seq_len, :]
+        input_q = tf.contrib.layers.layer_norm(
+            input_q, begin_norm_axis=-1, begin_params_axis=-1
+        )
+        input_q = tf.reshape(input_, [-1, num_units])
+        input_q = tf.layers.dense(
+            input_q, num_units, kernel_initializer=tf.glorot_normal_initializer
+        )
+        input_q = tf.reshape(
+            input_q, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_q = tf.layers.dropout(
+            input_q,
+            0.9,
+            training=is_training,
+            noise_shape=[batch_size, seq_len, num_vector, 1],
+        )
+        input_q = tf.transpose(input_q, (0, 2, 1, 3))
+        score = tf.nn.softmax(
+            tf.matmul(input_q, input_q, transpose_b=True)
+            / tf.sqrt(tf.constant(num_units // num_vector, dtype=tf.float32))
+        )
+        input_v = tf.layers.dense(
+            input_, num_units, kernel_initializer=tf.glorot_normal_initializer
+        )
+        input_v = tf.reshape(
+            input_v, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_v = tf.layers.dropout(
+            input_v,
+            0.9,
+            training=is_training,
+            noise_shape=[batch_size, seq_len, num_vector, 1],
+        )
+        input_v = tf.transpose(input_v, (0, 2, 1, 3))
+        input_ = tf.matmul(score, input_v)
+        input_ = tf.transpose(input_, (0, 2, 1, 3))
+        input_ = tf.reshape(input_, [-1, num_units])
+        p = tf.layers.dense(input_, 1, kernel_initializer=tf.glorot_normal_initializer)
+        p = tf.reshape(p, [-1, seq_len])
+        p = tf.nn.softmax(p)
+        p = tf.expand_dims(p, 1)
+        input_ = tf.reshape(input_, [-1, seq_len, num_units])
+        input_ = tf.matmul(p, input_)
+        input_ = tf.squeeze(input_, -2)
+        return input_
 
     def model(features, labels, mode, params):
         is_training = mode == tf.estimator.ModeKeys.TRAIN
@@ -72,13 +118,7 @@ def model_builder(embedding_, context_, sample_size):
         context = tf.nn.embedding_lookup(embedding, context)
         with tf.variable_scope("q"):
             q = _extractor(
-                q,
-                num_vector,
-                is_training,
-                pos_embedding,
-                k_size=4,
-                strides=1,
-                sample_size=1,
+                q, num_vector, is_training, pos_embedding, k_size=4, strides=1
             )
         with tf.variable_scope("c"):
             context = tf.reshape(
@@ -118,7 +158,7 @@ def model_builder(embedding_, context_, sample_size):
             )"""
             var = tf.trainable_variables()
             grads = tf.gradients(loss, var)
-            clipped_grad, norm = tf.clip_by_global_norm(grads, 1)
+            clipped_grad, norm = tf.clip_by_global_norm(grads, 0.5)
             tf.summary.scalar("grad_norm", norm)
             tf.summary.scalar("tp", tp)
             tf.summary.histogram("predictions", predictions)
