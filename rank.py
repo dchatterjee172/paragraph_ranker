@@ -15,7 +15,7 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 200
+    num_units = 300
     num_vector = 10
     ls = 301
     le = num_units + 1
@@ -28,19 +28,19 @@ def model_builder(embedding_, context_, sample_size):
     pos_embedding_ = np.expand_dims(pos_embedding_, 0) / 2.0
 
     def _extractor(_input, num_vector, is_training, pos, k_size=7, strides=2):
+        input_ = _input
+        seq_len = tf.shape(input_)[-2]
+        batch_size = tf.shape(input_)[0]
+        input_ = input_ + pos[:, :seq_len, :]
+        input_ = tf.contrib.layers.layer_norm(
+            input_, begin_norm_axis=-1, begin_params_axis=-1
+        )
         input_ = tf.layers.separable_conv1d(
             _input, num_units, k_size, padding="same", strides=strides
         )
         seq_len = tf.shape(input_)[-2]
-        batch_size = tf.shape(input_)[0]
         input_ = tf.layers.batch_normalization(input_, training=is_training)
-        input_ = tf.nn.relu(input_)
-        input_ = tf.reshape(input_, [-1, num_units])
-        input_q = tf.reshape(input_, [-1, seq_len, num_units])
-        input_q = input_q + pos[:, :seq_len, :]
-        input_q = tf.contrib.layers.layer_norm(
-            input_q, begin_norm_axis=-1, begin_params_axis=-1
-        )
+        input_ = tf.nn.leaky_relu(input_)
         input_q = tf.reshape(input_, [-1, num_units])
         input_q = tf.layers.dense(
             input_q, num_units, kernel_initializer=tf.glorot_normal_initializer
@@ -50,7 +50,7 @@ def model_builder(embedding_, context_, sample_size):
         )
         input_q = tf.layers.dropout(
             input_q,
-            0.0,
+            0.2,
             training=is_training,
             noise_shape=[batch_size, seq_len, num_vector, 1],
         )
@@ -59,6 +59,7 @@ def model_builder(embedding_, context_, sample_size):
             tf.matmul(input_q, input_q, transpose_b=True)
             / tf.sqrt(tf.constant(num_units // num_vector, dtype=tf.float32))
         )
+        input_v = tf.reshape(input_, [-1, num_units])
         input_v = tf.layers.dense(
             input_, num_units, kernel_initializer=tf.glorot_normal_initializer
         )
@@ -67,14 +68,19 @@ def model_builder(embedding_, context_, sample_size):
         )
         input_v = tf.layers.dropout(
             input_v,
-            0.0,
+            0.2,
             training=is_training,
             noise_shape=[batch_size, seq_len, num_vector, 1],
         )
         input_v = tf.transpose(input_v, (0, 2, 1, 3))
-        input_ = tf.matmul(score, input_v)
-        p = tf.transpose(input_, (0, 2, 1, 3))
-        p = tf.reshape(p, [-1, num_units])
+        input_v = tf.matmul(score, input_v)
+        input_v = tf.transpose(input_v, [0, 2, 1, 3])
+        input_v = tf.reshape(input_v, [batch_size, seq_len, num_units])
+        input_ = input_ + input_v
+        input_ = tf.contrib.layers.layer_norm(
+            input_, begin_norm_axis=-1, begin_params_axis=-1
+        )
+        p = tf.reshape(input_, [-1, num_units])
         p = tf.layers.dense(
             p, num_vector, kernel_initializer=tf.glorot_normal_initializer
         )
@@ -82,10 +88,12 @@ def model_builder(embedding_, context_, sample_size):
         p = tf.transpose(p, [0, 2, 1])
         p = tf.nn.softmax(p)
         p = tf.expand_dims(p, 2)
+        input_ = tf.reshape(input_, [-1, seq_len, num_vector, num_units // num_vector])
+        input_ = tf.transpose(input_, [0, 2, 1, 3])
         input_ = tf.matmul(p, input_)
         input_ = tf.squeeze(input_, -2)
         input_ = tf.layers.dropout(
-            input_, 0.5, training=is_training, noise_shape=[batch_size, num_vector, 1]
+            input_, 0.2, training=is_training, noise_shape=[batch_size, num_vector, 1]
         )
         input_ = tf.reshape(input_, [-1, num_units])
         return input_
