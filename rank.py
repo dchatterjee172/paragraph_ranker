@@ -15,10 +15,10 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 300
+    num_units = 200
     num_vector = 10
     ls = 301
-    le = num_units + 1
+    le = 301
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
     for k in range(1, le):
         for j in range(1, ls):
@@ -44,10 +44,35 @@ def model_builder(embedding_, context_, sample_size):
             input_, 0.3, training=is_training, noise_shape=[batch_size, 1, num_units]
         )
         input_ = tf.reshape(input_, [-1, num_units])
-        input_ = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
-        input_ = tf.layers.dropout(input_, 0.5, training=is_training)
-        input_ = tf.reshape(input_, [-1, seq_len, num_units])
-        input_ = tf.reduce_mean(input_, axis=1)
+        input_q = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
+        input_q = tf.reshape(
+            input_q, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_q = tf.transpose(input_q, [0, 2, 1, 3])
+        input_k = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
+        input_k = tf.reshape(
+            input_k, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_k = tf.transpose(input_k, [0, 2, 1, 3])
+        input_v = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
+        input_v = tf.reshape(
+            input_v, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_v = tf.transpose(input_v, [0, 2, 1, 3])
+        score = tf.nn.softmax(
+            tf.matmul(input_q, input_k, transpose_b=True)
+            / tf.sqrt(tf.constant(num_units // num_vector, dtype=tf.float32))
+        )
+        input_v = tf.matmul(score, input_v)
+        p = tf.transpose(input_v, [0, 2, 1, 3])
+        p = tf.reshape(p, [-1, num_units])
+        p = tf.layers.dense(p, num_vector)
+        p = tf.reshape(p, [-1, seq_len, num_vector])
+        p = tf.transpose(p, [0, 2, 1])
+        p = tf.nn.softmax(p)
+        p = tf.expand_dims(p, 2)
+        input_v = tf.matmul(p, input_v)
+        input_ = tf.reshape(input_v, [-1, num_units])
         return input_
 
     def model(features, labels, mode, params):
