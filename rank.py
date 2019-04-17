@@ -18,7 +18,7 @@ def model_builder(embedding_, context_, sample_size):
     num_units = 200
     num_vector = 10
     ls = 301
-    le = 301
+    le = num_units + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
     for k in range(1, le):
         for j in range(1, ls):
@@ -31,14 +31,11 @@ def model_builder(embedding_, context_, sample_size):
         input_ = _input
         seq_len = tf.shape(input_)[-2]
         batch_size = tf.shape(input_)[0]
-        input_ = input_ + pos[:, :seq_len, :]
-        input_ = tf.contrib.layers.layer_norm(
-            input_, begin_norm_axis=-1, begin_params_axis=-1
-        )
         input_ = tf.layers.separable_conv1d(
             input_, num_units, k_size, padding="same", strides=strides
         )
         seq_len = tf.shape(input_)[-2]
+        input_ = input_ + pos[:, :seq_len, :]
         input_ = tf.layers.batch_normalization(input_, training=is_training)
         input_ = tf.layers.dropout(
             input_, 0.3, training=is_training, noise_shape=[batch_size, 1, num_units]
@@ -64,11 +61,9 @@ def model_builder(embedding_, context_, sample_size):
             / tf.sqrt(tf.constant(num_units // num_vector, dtype=tf.float32))
         )
         input_v = tf.matmul(score, input_v)
-        p = tf.transpose(input_v, [0, 2, 1, 3])
-        p = tf.reshape(p, [-1, num_units])
-        p = tf.layers.dense(p, num_vector)
-        p = tf.reshape(p, [-1, seq_len, num_vector])
-        p = tf.transpose(p, [0, 2, 1])
+        p = tf.reshape(input_v, [-1, num_units // num_vector])
+        p = tf.layers.dense(p, 1)
+        p = tf.reshape(p, [-1, num_vector, seq_len])
         p = tf.nn.softmax(p)
         p = tf.expand_dims(p, 2)
         input_v = tf.matmul(p, input_v)
