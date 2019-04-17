@@ -40,62 +40,14 @@ def model_builder(embedding_, context_, sample_size):
         )
         seq_len = tf.shape(input_)[-2]
         input_ = tf.layers.batch_normalization(input_, training=is_training)
-        input_ = tf.nn.leaky_relu(input_)
-        input_q = tf.reshape(input_, [-1, num_units])
-        input_q = tf.layers.dense(
-            input_q, num_units, kernel_initializer=tf.glorot_normal_initializer
-        )
-        input_q = tf.reshape(
-            input_q, [-1, seq_len, num_vector, num_units // num_vector]
-        )
-        input_q = tf.layers.dropout(
-            input_q,
-            0.2,
-            training=is_training,
-            noise_shape=[batch_size, seq_len, num_vector, 1],
-        )
-        input_q = tf.transpose(input_q, (0, 2, 1, 3))
-        score = tf.nn.softmax(
-            tf.matmul(input_q, input_q, transpose_b=True)
-            / tf.sqrt(tf.constant(num_units // num_vector, dtype=tf.float32))
-        )
-        input_v = tf.reshape(input_, [-1, num_units])
-        input_v = tf.layers.dense(
-            input_, num_units, kernel_initializer=tf.glorot_normal_initializer
-        )
-        input_v = tf.reshape(
-            input_v, [-1, seq_len, num_vector, num_units // num_vector]
-        )
-        input_v = tf.layers.dropout(
-            input_v,
-            0.2,
-            training=is_training,
-            noise_shape=[batch_size, seq_len, num_vector, 1],
-        )
-        input_v = tf.transpose(input_v, (0, 2, 1, 3))
-        input_v = tf.matmul(score, input_v)
-        input_v = tf.transpose(input_v, [0, 2, 1, 3])
-        input_v = tf.reshape(input_v, [batch_size, seq_len, num_units])
-        input_ = input_ + input_v
-        input_ = tf.contrib.layers.layer_norm(
-            input_, begin_norm_axis=-1, begin_params_axis=-1
-        )
-        p = tf.reshape(input_, [-1, num_units])
-        p = tf.layers.dense(
-            p, num_vector, kernel_initializer=tf.glorot_normal_initializer
-        )
-        p = tf.reshape(p, [-1, seq_len, num_vector])
-        p = tf.transpose(p, [0, 2, 1])
-        p = tf.nn.softmax(p)
-        p = tf.expand_dims(p, 2)
-        input_ = tf.reshape(input_, [-1, seq_len, num_vector, num_units // num_vector])
-        input_ = tf.transpose(input_, [0, 2, 1, 3])
-        input_ = tf.matmul(p, input_)
-        input_ = tf.squeeze(input_, -2)
         input_ = tf.layers.dropout(
-            input_, 0.2, training=is_training, noise_shape=[batch_size, num_vector, 1]
+            input_, 0.3, training=is_training, noise_shape=[batch_size, 1, num_units]
         )
         input_ = tf.reshape(input_, [-1, num_units])
+        input_ = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
+        input_ = tf.layers.dropout(input_, 0.5, training=is_training)
+        input_ = tf.reshape(input_, [-1, seq_len, num_units])
+        input_ = tf.reduce_mean(input_, axis=1)
         return input_
 
     def model(features, labels, mode, params):
