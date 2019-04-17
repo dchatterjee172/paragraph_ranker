@@ -36,7 +36,7 @@ def model_builder(embedding_, context_, sample_size):
             input_, begin_norm_axis=-1, begin_params_axis=-1
         )
         input_ = tf.layers.separable_conv1d(
-            _input, num_units, k_size, padding="same", strides=strides
+            input_, num_units, k_size, padding="same", strides=strides
         )
         seq_len = tf.shape(input_)[-2]
         input_ = tf.layers.batch_normalization(input_, training=is_training)
