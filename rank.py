@@ -15,8 +15,8 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 
 def model_builder(embedding_, context_, sample_size):
-    num_units = 200
-    num_vector = 10
+    num_units = 300
+    num_vector = 15
     ls = 301
     le = num_units + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
@@ -41,11 +41,14 @@ def model_builder(embedding_, context_, sample_size):
             input_, 0.3, training=is_training, noise_shape=[batch_size, 1, num_units]
         )
         input_ = tf.reshape(input_, [-1, num_units])
-        input_q = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
-        input_q = tf.reshape(
-            input_q, [-1, seq_len, num_vector, num_units // num_vector]
+        input_q = tf.get_variable(
+            "input_q",
+            initializer=tf.initializers.random_uniform(minval=-0.001, maxval=0.001),
+            shape=(1, num_vector, 1, num_units // num_vector),
+            trainable=True,
         )
-        input_q = tf.transpose(input_q, [0, 2, 1, 3])
+        input_q = tf.nn.tanh(input_q)
+        input_q = tf.tile(input_q, [batch_size, 1, 1, 1])
         input_k = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
         input_k = tf.reshape(
             input_k, [-1, seq_len, num_vector, num_units // num_vector]
@@ -61,12 +64,6 @@ def model_builder(embedding_, context_, sample_size):
             / tf.sqrt(tf.constant(num_units // num_vector, dtype=tf.float32))
         )
         input_v = tf.matmul(score, input_v)
-        p = tf.reshape(input_v, [-1, num_units // num_vector])
-        p = tf.layers.dense(p, 1)
-        p = tf.reshape(p, [-1, num_vector, seq_len])
-        p = tf.nn.softmax(p)
-        p = tf.expand_dims(p, 2)
-        input_v = tf.matmul(p, input_v)
         input_ = tf.reshape(input_v, [-1, num_units])
         return input_
 
