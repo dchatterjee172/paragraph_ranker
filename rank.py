@@ -142,12 +142,12 @@ def model_builder(embedding_, context_, sample_size):
             tf.constant(num_units, dtype=tf.float32)
         )
         logits = tf.squeeze(logits, -1)
-        labels = tf.zeros(shape=(batch_size), dtype=tf.int32)
+        labels = tf.ones(shape=(batch_size), dtype=tf.int32) * (sample_size - 1)
         labels_one_hot = tf.one_hot(labels, depth=sample_size)
         loss = tf.nn.sigmoid_cross_entropy_with_logits(
             labels=labels_one_hot, logits=logits
         )
-        loss = loss[:, 0] + tf.reduce_mean(loss[:, 1:], axis=-1)
+        loss = loss[:, -1] + tf.reduce_mean(loss[:, :-1], axis=-1)
         loss = tf.reduce_mean(loss)
         predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
         tp = tf.reduce_mean(tf.to_float(tf.equal(predictions, labels)))
@@ -239,7 +239,7 @@ def input_fn_builder(
             sample_size_other = sample_size - tf.shape(sample_same_wiki)[0]
             sample_other_wiki = tf.random_shuffle(sample_other_wiki)[:sample_size_other]
             example["context_id"] = tf.concat(
-                [example["context_id"], sample_same_wiki, sample_other_wiki], axis=-1
+                [sample_same_wiki, sample_other_wiki, example["context_id"]], axis=-1
             )
             return example
 
@@ -325,7 +325,7 @@ def main(_):
             logits = result["logits"]
             context_id = result["context_id"]
             unique_id = str(result["unique_id"])
-            if pred == 0:
+            if pred == FLAGS.sample_size - 1:
                 tp += 1
                 res[id_to_q[unique_id]]["tp"] = 1
             else:
@@ -334,7 +334,7 @@ def main(_):
             res[id_to_q[unique_id]]["para"] = list()
             ranked = sorted(zip(context_id, logits), key=lambda x: x[1], reverse=True)
             for i, (c, l) in enumerate(ranked[: FLAGS.top_k]):
-                if c == context_id[0]:
+                if c == context_id[-1]:
                     actual = True
                     tp_top += 1
                     res[id_to_q[unique_id]][f"tp_top_{FLAGS.top_k}"] = 1
