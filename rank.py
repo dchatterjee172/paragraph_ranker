@@ -16,7 +16,7 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 def model_builder(embedding_, context_, sample_size):
     num_units = 300
-    num_vector = 15
+    num_vector = 10
     ls = 301
     le = num_units + 1
     pos_embedding_ = np.ones((ls - 1, le - 1), dtype=np.float32)
@@ -47,16 +47,33 @@ def model_builder(embedding_, context_, sample_size):
             shape=(1, num_vector, 1, num_units // num_vector),
             trainable=True,
         )
-        input_q = tf.nn.tanh(input_q)
         input_q = tf.tile(input_q, [batch_size, 1, 1, 1])
+        input_q = tf.layers.dropout(
+            input_q,
+            0.2,
+            training=is_training,
+            noise_shape=[batch_size, num_vector, 1, 1],
+        )
         input_k = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
         input_k = tf.reshape(
             input_k, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_k = tf.layers.dropout(
+            input_k,
+            0.2,
+            training=is_training,
+            noise_shape=[batch_size, seq_len, num_vector, 1],
         )
         input_k = tf.transpose(input_k, [0, 2, 1, 3])
         input_v = tf.layers.dense(input_, num_units, activation=tf.nn.leaky_relu)
         input_v = tf.reshape(
             input_v, [-1, seq_len, num_vector, num_units // num_vector]
+        )
+        input_v = tf.layers.dropout(
+            input_v,
+            0.2,
+            training=is_training,
+            noise_shape=[batch_size, seq_len, num_vector, 1],
         )
         input_v = tf.transpose(input_v, [0, 2, 1, 3])
         score = tf.nn.softmax(
@@ -65,6 +82,8 @@ def model_builder(embedding_, context_, sample_size):
         )
         input_v = tf.matmul(score, input_v)
         input_ = tf.reshape(input_v, [-1, num_units])
+        input_v = tf.contrib.layers.layer_norm(input_v, begin_norm_axis=-1)
+        input_v = tf.nn.relu(input_v)
         return input_
 
     def model(features, labels, mode, params):
@@ -119,7 +138,7 @@ def model_builder(embedding_, context_, sample_size):
         loss = tf.nn.sigmoid_cross_entropy_with_logits(
             labels=labels_one_hot, logits=logits
         )
-        loss = loss[:, 0] + tf.reduce_mean(loss[:, 1:], axis=-1)
+        loss = loss[:, -1] + tf.reduce_mean(loss[:, :-1], axis=-1)
         loss = tf.reduce_mean(loss)
         predictions = tf.argmax(logits, axis=-1, output_type=tf.int32)
         tp = tf.reduce_mean(tf.to_float(tf.equal(predictions, labels)))
@@ -211,7 +230,7 @@ def input_fn_builder(
             sample_size_other = sample_size - tf.shape(sample_same_wiki)[0]
             sample_other_wiki = tf.random_shuffle(sample_other_wiki)[:sample_size_other]
             example["context_id"] = tf.concat(
-                [example["context_id"], sample_same_wiki, sample_other_wiki], axis=-1
+                [sample_same_wiki, sample_other_wiki, example["context_id"]], axis=-1
             )
             return example
 
@@ -297,7 +316,7 @@ def main(_):
             logits = result["logits"]
             context_id = result["context_id"]
             unique_id = str(result["unique_id"])
-            if pred == 0:
+            if pred == FLAGS.sample_size - 1:
                 tp += 1
                 res[id_to_q[unique_id]]["tp"] = 1
             else:
