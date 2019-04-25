@@ -174,7 +174,7 @@ def model_builder(embedding_, context_, sample_size):
             )
             return tf.estimator.EstimatorSpec(
                 mode,
-                loss=loss,
+                loss=loss + tf.reduce_mean(tf.reduce_sum(tf.abs(q), -1)) * 0.001,
                 train_op=tf.group([train, update_ops]),
                 scaffold=scaffold,
             )
