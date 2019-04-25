@@ -52,13 +52,6 @@ def model_builder(embedding_, context_, sample_size):
         p = tf.nn.softmax(p, axis=1)
         input_ = tf.reshape(input_, [-1, num_units])
         input_ = tf.layers.dense(input_, num_units, activation=tf.nn.relu)
-        input_1 = tf.layers.dense(
-            input_,
-            num_units,
-            activation=tf.nn.relu,
-            kernel_initializer=tf.initializers.identity(gain=0.1),
-        )
-        input_ = tf.contrib.layers.layer_norm(input_ + input_1, begin_norm_axis=-1)
         input_ = tf.reshape(input_, [-1, seq_len, num_units])
         input_ = tf.matmul(p, input_, transpose_a=True)
         input_ = tf.reshape(input_, [-1, num_units])
