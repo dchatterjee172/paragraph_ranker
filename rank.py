@@ -27,7 +27,7 @@ def model_builder(embedding_, context_, sample_size):
             )
     pos_embedding_ = np.expand_dims(pos_embedding_, 0) / 2.0
 
-    def _extractor(_input, num_vector, is_training, pos, k_size=7, strides=2):
+    def _extractor(_input, num_vector, is_training, pos, k_size=4, strides=2):
         input_ = _input
         seq_len = tf.shape(input_)[-2]
         batch_size = tf.shape(input_)[0]
@@ -37,19 +37,19 @@ def model_builder(embedding_, context_, sample_size):
         input_ = tf.layers.separable_conv1d(
             input_, num_units, k_size, padding="same", strides=strides
         )
-        seq_len = tf.shape(input_)[-2]
         input_ = tf.layers.batch_normalization(input_, training=is_training)
-        input_ = tf.nn.leaky_relu(input_)
-        input_ = tf.layers.dropout(
-            input_, 0.3, training=is_training, noise_shape=[batch_size, 1, num_units]
-        )
+        input_ = tf.nn.relu(input_)
+        seq_len = tf.shape(input_)[-2]
         p = tf.reshape(input_, [-1, num_units])
         p = tf.layers.dense(p, 1)
         p = tf.reshape(p, [batch_size, seq_len, 1])
         p = tf.nn.softmax(p, axis=1)
-        input_ = tf.matmul(p, input_, transpose_a=True)
-        input_ = tf.contrib.layers.layer_norm(input_, begin_norm_axis=-1)
         input_ = tf.reshape(input_, [-1, num_units])
+        input_ = tf.layers.dense(input_, num_units, activation=tf.nn.relu)
+        input_ = tf.reshape(input_, [-1, seq_len, num_units])
+        input_ = tf.matmul(p, input_, transpose_a=True)
+        input_ = tf.reshape(input_, [-1, num_units])
+        input_ = tf.contrib.layers.layer_norm(input_, begin_norm_axis=-1)
         return input_
 
     def model(features, labels, mode, params):
@@ -84,11 +84,11 @@ def model_builder(embedding_, context_, sample_size):
         q = tf.nn.embedding_lookup(embedding, q)
         context = tf.nn.embedding_lookup(all_context, context_id)
         context = tf.nn.embedding_lookup(embedding, context)
-        with tf.variable_scope("q"):
+        with tf.variable_scope("c", reuse=tf.AUTO_REUSE):
             q = _extractor(
                 q, num_vector, is_training, pos_embedding, k_size=4, strides=1
             )
-        with tf.variable_scope("c"):
+        with tf.variable_scope("c", reuse=tf.AUTO_REUSE):
             context = tf.reshape(
                 context, [batch_size * sample_size, -1, embedding_.shape[-1]]
             )
