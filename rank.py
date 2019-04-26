@@ -34,7 +34,7 @@ def model_builder(embedding_, context_, sample_size):
         input_ = tf.layers.dense(input_, num_units, activation=tf.nn.relu)
         input_ = tf.reshape(input_, [-1, seq_len, num_units])
         input_ = tf.layers.separable_conv1d(
-            input_, num_units, k_size, padding="same", strides=strides
+            input_, num_units * 2, k_size, padding="same", strides=strides
         )
         if q:
             input_ = tf.layers.batch_normalization(
@@ -45,16 +45,25 @@ def model_builder(embedding_, context_, sample_size):
                 input_, training=is_training, name="c_bn"
             )
         input_ = tf.nn.relu(input_)
+        input_ = tf.layers.dropout(
+            input_,
+            0.0,
+            training=is_training,
+            noise_shape=[batch_size, 1, num_units * 2],
+        )
         seq_len = tf.shape(input_)[-2]
-        p = tf.reshape(input_, [-1, num_units])
+        p = tf.reshape(input_, [-1, num_units * 2])
+        p = tf.layers.dense(p, num_units, activation=tf.nn.relu)
+        p = tf.layers.dropout(p, 0.5, training=is_training)
         p = tf.layers.dense(p, 1)
         p = tf.reshape(p, [batch_size, seq_len, 1])
         p = tf.nn.softmax(p, axis=1)
-        input_ = tf.reshape(input_, [-1, num_units])
+        input_ = tf.reshape(input_, [-1, num_units * 2])
         input_ = tf.layers.dense(input_, num_units, activation=tf.nn.relu)
         input_ = tf.reshape(input_, [-1, seq_len, num_units])
         input_ = tf.matmul(p, input_, transpose_a=True)
         input_ = tf.reshape(input_, [-1, num_units])
+        input_ = tf.contrib.layers.layer_norm(input_, begin_norm_axis=-1)
         return input_
 
     def model(features, labels, mode, params):
