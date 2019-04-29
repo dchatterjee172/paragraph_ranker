@@ -110,40 +110,40 @@ del all_words
 embedding_mat = list()
 word_to_index = dict()
 
-for c in tqdm(range(len(all_context)), total=len(all_context)):
-    for t in range(len(all_context[c])):
-        token = all_context[c][t]
+for c in tqdm(all_context):
+    for t in range(len(c)):
+        token = c[t]
         if token not in word_to_index and token in word_vecs:
-            all_context[c][t] = len(word_to_index) + 2
+            c[t] = len(word_to_index) + 2
             word_to_index[token] = len(word_to_index) + 2
             embedding_mat.append(word_vecs[token])
         elif token not in word_vecs:
-            all_context[c][t] = 1
+            c[t] = 1
         else:
-            all_context[c][t] = word_to_index[token]
-    if len(all_context[c]) < 300:
-        all_context[c] += [0] * (300 - len(all_context[c]))
+            c[t] = word_to_index[token]
+    if len(c) < 300:
+        c += [0] * (300 - len(c))
 
 writers = (
     FeatureWriter("test.tfrecord", wiki_start_end),
     FeatureWriter("train.tfrecord", wiki_start_end),
 )
 
-for i in range(2):
-    for q in tqdm(range(len(data[i])), total=len(data[i])):
-        for t in range(len(data[i][q][0])):
-            token = data[i][q][0][t]
+for i, d in enumerate(data):
+    for q in tqdm(d):
+        for t in range(len(q[0])):
+            token = q[0][t]
             if token not in word_to_index and token in word_vecs:
-                data[i][q][0][t] = len(word_to_index) + 2
+                q[0][t] = len(word_to_index) + 2
                 word_to_index[token] = len(word_to_index) + 2
                 embedding_mat.append(word_vecs[token])
             elif token not in word_vecs:
-                data[i][q][0][t] = 1
+                q[0][t] = 1
             else:
-                data[i][q][0][t] = word_to_index[token]
-        if len(data[i][q][0]) < 20:
-            data[i][q][0] += [0] * (20 - len(data[i][q][0]))
-        writers[i].process_feature(data[i][q])
+                q[0][t] = word_to_index[token]
+        if len(q[0]) < 20:
+            q[0] += [0] * (20 - len(q[0]))
+        writers[i].process_feature(q)
 
 map(lambda x: x.close(), writers)
 
@@ -156,3 +156,5 @@ with open("id_to_context.json", "w") as f:
     json.dump({v: k for k, v in all_context_id.items()}, f, indent=4),
 with open("id_to_question.json", "w") as f:
     json.dump(id_to_q, f, indent=4)
+with open("word_to_index.json", "w") as f:
+    json.dump(word_to_index, f, indent=4)
