@@ -37,21 +37,25 @@ sess.run(tf.initializers.global_variables())
 
 
 def get_para_vec(token_list):
-    for tokens in token_list:
+    for j, tokens in enumerate(token_list):
         for i in range(len(tokens)):
             tokens[i] = word_vecs.get(tokens[i], 1)
-            if len(tokens) < 300:
-                tokens.extend([0] * (300 - len(tokens)))
+        if len(tokens) < 300:
+            tokens.extend([0] * (300 - len(tokens)))
+        else:
+            token_list[j] = tokens[:300]
     feed_dict = {context: np.array(token_list)}
     return sess.run(c_vector, feed_dict)
 
 
 def get_q_vec(token_list):
-    for tokens in token_list:
+    for j, tokens in enumerate(token_list):
         for i in range(len(tokens)):
             tokens[i] = word_vecs.get(tokens[i], 1)
-            if len(tokens) < 20:
-                tokens.extend([0] * (20 - len(tokens)))
+        if len(tokens) < 20:
+            tokens.extend([0] * (20 - len(tokens)))
+        else:
+            token_list[j] = tokens[:20]
     feed_dict = {q: np.array(token_list)}
     return sess.run(q_vector, feed_dict)
 
