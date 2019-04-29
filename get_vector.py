@@ -30,7 +30,8 @@ with tf.variable_scope("c"):
     c_vector = _extractor(
         _input=context_emb, num_vector=2, h_size=150, is_training=False, pos=None
     )
-sess = tf.Session()
+config = tf.ConfigProto(device_count={"GPU": 0})
+sess = tf.Session(config=config)
 tf.train.init_from_checkpoint("model.ckpt-200000", {"/": "/"})
 sess.run(tf.initializers.global_variables())
 
@@ -55,5 +56,10 @@ def get_q_vec(token_list):
     return sess.run(q_vector, feed_dict)
 
 
-get_para_vec([["hi"] * 300] * 50)
-get_q_vec([["hi"] * 20])
+if __name__ == "__main__":
+    from time import monotonic as m
+
+    start = m()
+    get_para_vec([["hi"] * 300] * 100)
+    get_q_vec([["hi"] * 20])
+    print(m() - start)

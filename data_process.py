@@ -62,7 +62,7 @@ class FeatureWriter(object):
         self._writer.close()
 
 
-v1 = sorted(v1, key=lambda x: x["wiki_id"])
+v1 = sorted(v1, key=lambda x: x["wiki_idx"])
 nlp = spacy.load("en_core_web_sm", disable=["parser", "tagger"])
 all_context_id = dict()
 id_to_q = dict()
@@ -74,13 +74,13 @@ question_len = []
 wiki_start_end = od()
 for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     context_text = sample["context"]
-    if sample["wiki_id"] not in wiki_start_end:
+    if sample["wiki_idx"] not in wiki_start_end:
         try:
             last_wiki_id = next(reversed(wiki_start_end))
             wiki_start_end[last_wiki_id].append(len(all_context) - 1)
         except StopIteration:
             pass
-        wiki_start_end[sample["wiki_id"]] = [len(all_context)]
+        wiki_start_end[sample["wiki_idx"]] = [len(all_context)]
     if context_text not in all_context_id:
         context = [token.text for token in nlp(context_text)]
         if len(context) > 300:
@@ -95,7 +95,7 @@ for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     all_words.update(question)
     id_to_q[i] = sample["question"]
     data[int(sample["is_train"])].append(
-        [question, all_context_id[context_text], i, len(question), sample["wiki_id"]]
+        [question, all_context_id[context_text], i, len(question), sample["wiki_idx"]]
     )
 last_wiki_id = next(reversed(wiki_start_end))
 wiki_start_end[last_wiki_id].append(len(all_context) - 1)
