@@ -16,7 +16,7 @@ flags.DEFINE_integer("top_k", 10, "checking if correct para is in top k")
 
 def _extractor(_input, num_vector, h_size, is_training, pos, k_size=7, strides=2):
     all_input_ = []
-    batch_size = tf.shape(_input)
+    batch_size = tf.shape(_input)[0]
     for i in range(num_vector):
         input_ = tf.layers.separable_conv1d(
             _input,
