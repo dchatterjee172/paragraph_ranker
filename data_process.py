@@ -74,6 +74,7 @@ question_len = []
 wiki_start_end = od()
 for i, sample in tqdm(enumerate(v1), total=98169, desc="processing"):
     context_text = sample["context"]
+    sample["question"] = sample["question"].replace("?", "")
     if sample["wiki_idx"] not in wiki_start_end:
         try:
             last_wiki_id = next(reversed(wiki_start_end))
